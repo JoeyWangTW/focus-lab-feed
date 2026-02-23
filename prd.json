@@ -137,7 +137,7 @@
         "Summary includes any errors or warnings encountered during the run"
       ],
       "priority": 10,
-      "passes": false
+      "passes": true
     }
   ]
 }

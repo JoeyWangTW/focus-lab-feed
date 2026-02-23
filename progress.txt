@@ -20,6 +20,7 @@
 - Use `wait_until="domcontentloaded"` for Twitter page loads — `networkidle` may never fire due to constant streaming
 - Twitter login redirect check: look for both `/login` and `/i/flow/login` in URL
 - Validate session JSON before passing to Playwright to catch corrupted files early
+- `save_run_summary()` appends to run_log.json array — use returned Path in tests, not `tmp_path / "run_log.json"` (date subdir)
 - `sys.path.insert(0, ...)` needed in entry-point scripts that use `from src.` imports when run as `python3 src/file.py`
 - Interceptor uses `page.on("response", handler)` — handler must be async since it calls `await response.json()`
 - Reload page after attaching interceptor to capture initial timeline GraphQL requests
@@ -174,4 +175,20 @@
   - Store relative paths (from output_dir) in `local_media_paths` for portability — not absolute paths
   - `patch("src.media_downloader.aiohttp.ClientSession", return_value=FakeSession())` cleanly mocks the session context manager
   - Twitter media URLs may already have query params — always strip before appending format suffix
+---
+
+## 2026-02-22 - S2.5 Collection Run Summary
+- Added `save_run_summary()` to `storage.py` — appends run summary to `run_log.json` (JSON array)
+- Added `print_summary()` to `collector.py` — formatted table with all key stats
+- Collector now tracks a `warnings` list throughout the run (no GraphQL responses, image failures, no tweets parsed)
+- Summary dict: run_timestamp, total_tweets, new_tweets, duplicates_skipped, images_downloaded, images_failed, scroll_count, run_time_seconds, stop_reason, warnings
+- run_log.json supports multiple runs per day (appends to array)
+- Created `tests/test_run_summary.py` with 11 tests covering storage and print output
+- All 76 tests pass
+- Files changed: src/storage.py, src/collector.py, tests/test_run_summary.py, prd.json, docs/status.md, docs/worklog.md
+- **Learnings for future iterations:**
+  - `save_run_summary` uses `get_today_dir()` which creates a date subdirectory — tests must use the returned path, not assume `tmp_path/filename`
+  - `capsys` pytest fixture captures stdout cleanly for testing print output — no need for StringIO mocking
+  - Track warnings as a simple list[str] accumulated during the run — lightweight and flexible
+  - `new_tweets = len(tweets) - dupes_skipped` gives the actual count of fresh tweets added this run
 ---

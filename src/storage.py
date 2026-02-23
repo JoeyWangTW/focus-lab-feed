@@ -90,3 +90,22 @@ def load_metadata(output_dir: str = "feed_data") -> Optional[dict]:
 
     data = json.loads(tweets_file.read_text())
     return data.get("metadata")
+
+
+def save_run_summary(summary: dict, output_dir: str = "feed_data") -> Path:
+    """Append a run summary to today's run_log.json.
+
+    The file contains a JSON array of summary objects, one per run.
+    """
+    today_dir = get_today_dir(output_dir)
+    log_file = today_dir / "run_log.json"
+
+    if log_file.exists():
+        entries = json.loads(log_file.read_text())
+    else:
+        entries = []
+
+    entries.append(summary)
+    log_file.write_text(json.dumps(entries, indent=2, ensure_ascii=False))
+    print(f"[storage] Run summary appended to {log_file}")
+    return log_file

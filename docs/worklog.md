@@ -130,3 +130,14 @@
 - Created `tests/test_media_downloader.py` with 12 tests: URL formatting, success, dirs, HTTP errors, exceptions, no-media, paths, local_media_paths, failures, mixed results, suffix verification
 - All 65 tests pass (12 parser + 9 dedup + 20 scroller + 12 storage + 12 media)
 - Files changed: src/media_downloader.py, src/collector.py, tests/test_media_downloader.py, docs/status.md, docs/worklog.md
+
+## 2026-02-22 - S2.5 Collection Run Summary complete
+
+- Added `save_run_summary()` to `src/storage.py` — appends summary dicts to `run_log.json` array
+- Added `print_summary()` to `src/collector.py` — formatted table with all key stats
+- Collector tracks warnings list (no GraphQL responses, image download failures, no tweets parsed)
+- Summary includes: total tweets, new tweets, duplicates skipped, images downloaded/failed, scroll count, run time, stop reason, warnings
+- Summary saved to `feed_data/YYYY-MM-DD/run_log.json` (appended, supports multiple runs per day)
+- Created `tests/test_run_summary.py` with 11 tests: file creation, appending, location, field preservation, pretty-print, warnings, empty warnings, printed output, warning display, no-warnings omission, header
+- All 76 tests pass (12 parser + 9 dedup + 20 scroller + 12 storage + 12 media + 11 summary)
+- Files changed: src/storage.py, src/collector.py, tests/test_run_summary.py, prd.json, docs/status.md, docs/worklog.md

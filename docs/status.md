@@ -19,10 +19,11 @@
 - **S2.2 - Configurable Stop Conditions:** max_tweets, max_minutes, oldest_tweet_date — any condition stops collection
 - **S2.3 - Tweet Deduplication:** Cross-run and within-run dedup by tweet ID, with duplicate reporting
 - **S2.4 - Image Download:** Downloads tweet images with ?format=jpg&name=large, saves to media/, updates local_media_paths
+- **S2.5 - Collection Run Summary:** Formatted summary printed + saved to run_log.json with warnings/errors
 
 ## In Progress
 
-- **S2.5 - Collection Run Summary:** Print and save run summary (next up)
+- (none — all Milestone 1 stories complete!)
 
 ## Up Next (Sprint 2)
 
@@ -30,7 +31,7 @@
 2. ~~**S2.2 - Configurable Stop Conditions:** max_tweets, max_minutes, oldest_tweet_date~~ DONE
 3. ~~**S2.3 - Tweet Deduplication:** Skip duplicate tweets across runs~~ DONE
 4. ~~**S2.4 - Image Download:** Download tweet images locally~~ DONE
-5. **S2.5 - Collection Run Summary:** Print and save run summary
+5. ~~**S2.5 - Collection Run Summary:** Print and save run summary~~ DONE
 
 ## Completed (Sprint 1)
 

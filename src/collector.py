@@ -4,6 +4,7 @@ import asyncio
 import json
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 # Ensure project root is on sys.path when run directly (python3 src/collector.py)
@@ -15,7 +16,7 @@ from src.auth import load_session
 from src.interceptor import ResponseInterceptor
 from src.media_downloader import download_tweet_images
 from src.scroller import scroll_loop
-from src.storage import deduplicate_tweets, save_tweets
+from src.storage import deduplicate_tweets, save_run_summary, save_tweets
 
 
 def load_config() -> dict:
@@ -33,6 +34,26 @@ def load_config() -> dict:
     return json.loads(config_path.read_text())
 
 
+def print_summary(summary: dict):
+    """Print a formatted collection run summary."""
+    print("\n" + "=" * 50)
+    print("  Collection Run Summary")
+    print("=" * 50)
+    print(f"  Total tweets captured:  {summary['total_tweets']}")
+    print(f"  New tweets (non-dupe):  {summary['new_tweets']}")
+    print(f"  Duplicates skipped:     {summary['duplicates_skipped']}")
+    print(f"  Images downloaded:      {summary['images_downloaded']}")
+    print(f"  Image failures:         {summary['images_failed']}")
+    print(f"  Scrolls performed:      {summary['scroll_count']}")
+    print(f"  Total run time:         {summary['run_time_seconds']:.1f}s")
+    print(f"  Stop reason:            {summary['stop_reason']}")
+    if summary["warnings"]:
+        print(f"  Warnings:               {len(summary['warnings'])}")
+        for w in summary["warnings"]:
+            print(f"    - {w}")
+    print("=" * 50 + "\n")
+
+
 async def main():
     """Run the feed collector."""
     config = load_config()
@@ -40,6 +61,7 @@ async def main():
     print(f"[collector] Loaded config: {json.dumps(config, indent=2)}")
 
     start_time = time.monotonic()
+    warnings: list[str] = []
 
     # Set up interceptor
     interceptor = ResponseInterceptor(output_dir=output_dir)
@@ -74,6 +96,8 @@ async def main():
             await page.wait_for_timeout(5000)
             count = len(interceptor.responses)
             print(f"[collector] After extended wait: {count} response(s) captured.")
+            if count == 0:
+                warnings.append("No GraphQL responses captured after extended wait")
 
         # Scroll to collect more tweets
         max_tweets = config.get("max_tweets", 50)
@@ -101,26 +125,38 @@ async def main():
         if tweets:
             # Deduplicate against existing tweets from today's file
             merged, dupes_skipped = deduplicate_tweets(tweets, output_dir)
+            new_tweets = len(tweets) - dupes_skipped
 
             # Download images from tweets
             downloaded, dl_failed = await download_tweet_images(merged, output_dir)
+            if dl_failed > 0:
+                warnings.append(f"{dl_failed} image download(s) failed")
 
             save_tweets(merged, output_dir, duration_seconds=duration)
         else:
             dupes_skipped = 0
+            new_tweets = 0
             downloaded = 0
             dl_failed = 0
-            print("[collector] No tweets parsed from responses.")
+            warnings.append("No tweets parsed from intercepted responses")
 
-        total_responses = len(interceptor.responses)
-        print(
-            f"[collector] Collection complete. "
-            f"{total_responses} raw response(s), {len(tweets)} tweets parsed, "
-            f"{dupes_skipped} duplicates skipped, "
-            f"{downloaded} images downloaded ({dl_failed} failed), "
-            f"{scroll_stats['scroll_count']} scrolls in {duration:.1f}s. "
-            f"Stop reason: {scroll_stats['stop_reason']}"
-        )
+        # Build summary
+        summary = {
+            "run_timestamp": datetime.now().isoformat(),
+            "total_tweets": len(tweets),
+            "new_tweets": new_tweets,
+            "duplicates_skipped": dupes_skipped,
+            "images_downloaded": downloaded,
+            "images_failed": dl_failed,
+            "scroll_count": scroll_stats["scroll_count"],
+            "run_time_seconds": round(duration, 2),
+            "stop_reason": scroll_stats["stop_reason"],
+            "warnings": warnings,
+        }
+
+        print_summary(summary)
+        save_run_summary(summary, output_dir)
+
         await browser.close()
 
 
