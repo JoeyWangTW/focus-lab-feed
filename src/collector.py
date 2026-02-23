@@ -26,6 +26,7 @@ def load_config() -> dict:
             "scroll_delay_min": 2,
             "scroll_delay_max": 5,
             "max_tweets": 50,
+            "max_minutes": 5,
             "output_dir": "feed_data",
         }
     return json.loads(config_path.read_text())
@@ -75,6 +76,8 @@ async def main():
 
         # Scroll to collect more tweets
         max_tweets = config.get("max_tweets", 50)
+        max_minutes = config.get("max_minutes", None)
+        oldest_tweet_date = config.get("oldest_tweet_date", None)
         delay_min = config.get("scroll_delay_min", 2)
         delay_max = config.get("scroll_delay_max", 5)
 
@@ -84,6 +87,8 @@ async def main():
             delay_min=delay_min,
             delay_max=delay_max,
             max_tweets=max_tweets,
+            max_minutes=max_minutes,
+            oldest_tweet_date=oldest_tweet_date,
         )
 
         # Parse final tweet set

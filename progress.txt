@@ -23,6 +23,9 @@
 - pytest-asyncio required for async test functions — use `@pytest.mark.asyncio` decorator
 - scroll_loop() uses interceptor.parse_all_tweets() to count tweets — keeps interceptor as single source of truth
 - Use `page.wait_for_timeout(2000)` after scroll to let GraphQL responses arrive before counting
+- Twitter date format: `"%a %b %d %H:%M:%S %z %Y"` — use `_parse_twitter_date()` from scroller.py
+- Mock `time.monotonic()` with `patch("src.scroller.time.monotonic", side_effect=iter([...]))` for time-based tests
+- `FakeDateInterceptor` with `tweet_batches: list[list[Tweet]]` for date-aware scroll tests
 
 ---
 
@@ -116,4 +119,20 @@
   - `FakeInterceptor` with `tweet_schedule` list is effective for testing scroll loops without real browser
   - `page.wait_for_timeout(2000)` after scroll gives time for GraphQL responses to arrive before parsing
   - scroll_loop reuses `interceptor.parse_all_tweets()` to count — keeps interceptor as single source of truth
+---
+
+## 2026-02-22 - S2.2 Configurable Stop Conditions
+- Added `max_minutes` and `oldest_tweet_date` stop conditions to `scroll_loop()`
+- Stop logic: check time → check tweet count → check oldest date → scroll — whichever fires first wins
+- Helper functions: `_parse_twitter_date()` (Twitter date format → datetime), `_has_tweet_older_than()` (checks any tweet older than threshold)
+- Updated `collector.py` to pass new config values; updated `config.json` with `oldest_tweet_date: null`
+- 11 new tests added (time mocking with `patch("src.scroller.time.monotonic")`, FakeDateInterceptor for date tests)
+- All 44 tests pass
+- Files changed: src/scroller.py, src/collector.py, config.json, tests/test_scroller.py, docs/status.md, docs/worklog.md
+- **Learnings for future iterations:**
+  - `time.monotonic()` can be mocked with `patch("src.scroller.time.monotonic", side_effect=iter([...]))` for precise time simulation
+  - Twitter date format: `"%a %b %d %H:%M:%S %z %Y"` — always has timezone (+0000)
+  - For date comparison, use `.date()` on both sides to avoid timezone-naive vs timezone-aware issues
+  - `FakeDateInterceptor` with `tweet_batches: list[list[Tweet]]` enables date-specific test scenarios
+  - Time check fires at top of while loop before scrolling — a timed-out loop reports scroll_count=0 if it expires before the first scroll
 ---

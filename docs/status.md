@@ -16,15 +16,16 @@
 - **S1.4 - Tweet Parsing:** Parser navigates nested GraphQL JSON, extracts Tweet objects, handles retweets/ads/missing fields
 - **S1.5 - Data Output:** Structured JSON output with metadata, pretty-printed, round-trip load verified
 - **S2.1 - Scroll Automation:** scroll_loop() with stale detection, logging, max_tweets stop condition
+- **S2.2 - Configurable Stop Conditions:** max_tweets, max_minutes, oldest_tweet_date — any condition stops collection
 
 ## In Progress
 
-- **S2.2 - Configurable Stop Conditions:** max_tweets, max_minutes, oldest_tweet_date (next up)
+- **S2.3 - Tweet Deduplication:** Skip duplicate tweets across runs (next up)
 
 ## Up Next (Sprint 2)
 
 1. ~~**S2.1 - Scroll Automation:** Auto-scroll feed with random delays~~ DONE
-2. **S2.2 - Configurable Stop Conditions:** max_tweets, max_minutes, oldest_tweet_date
+2. ~~**S2.2 - Configurable Stop Conditions:** max_tweets, max_minutes, oldest_tweet_date~~ DONE
 3. **S2.3 - Tweet Deduplication:** Skip duplicate tweets across runs
 4. **S2.4 - Image Download:** Download tweet images locally
 5. **S2.5 - Collection Run Summary:** Print and save run summary

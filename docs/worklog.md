@@ -90,3 +90,16 @@
 - Added `pytest-asyncio` to requirements.txt for async test support
 - All 33 tests pass (12 parser + 9 scroller + 12 storage)
 - Files changed: src/scroller.py, src/collector.py, requirements.txt, tests/test_scroller.py
+
+## 2026-02-22 - S2.2 Configurable Stop Conditions complete
+
+- Added `max_minutes` and `oldest_tweet_date` stop conditions to `scroll_loop()` in `src/scroller.py`
+- Stop conditions: max_tweets, max_minutes (time limit), oldest_tweet_date (YYYY-MM-DD), stale detection — whichever fires first
+- Added `_parse_twitter_date()` and `_has_tweet_older_than()` helper functions
+- Updated `collector.py` to pass `max_minutes` and `oldest_tweet_date` from config to scroll_loop
+- Added `oldest_tweet_date: null` to `config.json` (max_minutes was already present)
+- Default: 50 tweets or 5 minutes, whichever comes first
+- Stop reason is clearly logged for every condition
+- Added 11 new tests: max_minutes stop, max_minutes not triggered, time-before-tweets priority, oldest_tweet_date stop, date not triggered, date on initial load, date parsing, invalid dates, has_tweet_older_than true/false/unparseable
+- All 44 tests pass (12 parser + 20 scroller + 12 storage)
+- Files changed: src/scroller.py, src/collector.py, config.json, tests/test_scroller.py, docs/status.md, docs/worklog.md
