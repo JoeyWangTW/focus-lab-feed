@@ -29,7 +29,7 @@
         "session/ directory is gitignored"
       ],
       "priority": 2,
-      "passes": false
+      "passes": true
     },
     {
       "id": "S1.3",

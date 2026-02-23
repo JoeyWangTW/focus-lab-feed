@@ -11,15 +11,16 @@
 - Technical research on Twitter/X GraphQL API, DOM structure, and reference projects
 - VP planning session: roadmap sharpened, sprint plan locked, prd.json populated with user stories
 - **S1.1 - Project Scaffolding:** src/ structure, requirements.txt, config.json, .gitignore all created
+- **S1.2 - Session Management:** login_and_save_session(), load_session() with validation, error handling
 
 ## In Progress
 
-- **S1.2 - Session Management:** Browser login flow, save/load storage_state (next up)
+- **S1.3 - GraphQL Interception:** Intercept HomeTimeline responses via page.on("response") (next up)
 
 ## Up Next (Sprint 1 -- This Week)
 
 1. ~~**S1.1 - Project Scaffolding:** Create `src/` structure, requirements.txt, config.json, .gitignore~~ DONE
-2. **S1.2 - Session Management:** Browser login flow, save/load storage_state
+2. ~~**S1.2 - Session Management:** Browser login flow, save/load storage_state~~ DONE
 3. **S1.3 - GraphQL Interception:** Intercept HomeTimeline responses via page.on("response")
 4. **S1.4 - Tweet Parsing:** Extract structured tweet data from nested JSON
 5. **S1.5 - Data Output:** Save parsed tweets as JSON to feed_data/

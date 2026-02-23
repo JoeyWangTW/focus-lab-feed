@@ -5,6 +5,10 @@
 - Config loaded from `config.json` at project root
 - Use `dataclasses` for data models (Tweet, etc.)
 - aiohttp used for async HTTP downloads (media_downloader.py)
+- Use `source .venv/bin/activate` before running python commands (venv required due to externally-managed Python)
+- Use `wait_until="domcontentloaded"` for Twitter page loads — `networkidle` may never fire due to constant streaming
+- Twitter login redirect check: look for both `/login` and `/i/flow/login` in URL
+- Validate session JSON before passing to Playwright to catch corrupted files early
 
 ---
 
@@ -21,4 +25,21 @@
   - Each module has stub implementations ready for the next stories to flesh out
   - auth.py already has login_and_save_session() and load_session() stubs for S1.2
   - interceptor.py already has ResponseInterceptor class with handle_response() for S1.3
+---
+
+## 2026-02-22 - S1.2 Session Management
+- Improved `src/auth.py` with robust session management
+- login_and_save_session(): opens headed Chromium to twitter.com/login, waits for user to log in, saves storage_state to session/twitter_state.json
+- load_session(): validates session JSON, launches browser with saved state, navigates to twitter.com/home, checks for login redirects
+- Three error paths handled: missing session file (FileNotFoundError), corrupted JSON (RuntimeError), expired session redirect (RuntimeError)
+- Used `wait_until="domcontentloaded"` + 3s timeout instead of `networkidle` which hangs on Twitter
+- Added `[auth]` log prefix for consistent logging
+- Set up .venv with playwright and aiohttp, installed chromium browser
+- Files changed: src/auth.py, prd.json
+- **Learnings for future iterations:**
+  - Must use virtual environment (`.venv/`) — system Python is externally managed
+  - `playwright install chromium` required after pip install playwright
+  - Twitter redirects to `/i/flow/login` (not just `/login`) when session is expired
+  - `networkidle` wait strategy is unreliable for Twitter — use `domcontentloaded` + explicit timeout
+  - load_session() takes a playwright instance as parameter — caller manages async_playwright() context
 ---
