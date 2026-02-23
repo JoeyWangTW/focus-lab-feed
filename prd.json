@@ -1,0 +1,143 @@
+{
+  "project": "Focus Lab Feed Collector",
+  "branchName": "milestone-1-twitter-collection",
+  "description": "Automated browser agent that scrolls social media feeds and collects content via Playwright API interception. Part of the Focus Lab vision for replacing social media scrolling with AI-curated, goal-aligned content.",
+  "userStories": [
+    {
+      "id": "S1.1",
+      "title": "Project Scaffolding",
+      "description": "As a developer, I want the project structure set up with all necessary files so that I can start building features immediately.",
+      "acceptanceCriteria": [
+        "src/ directory exists with __init__.py, collector.py, auth.py, interceptor.py, scroller.py, media_downloader.py, storage.py, models.py",
+        "requirements.txt exists with playwright as dependency",
+        "config.json exists with default settings (scroll_delay_min: 2, scroll_delay_max: 5, max_tweets: 50, output_dir: feed_data)",
+        ".gitignore excludes session/, feed_data/, __pycache__/, .venv/, *.pyc",
+        "python src/collector.py runs without errors"
+      ],
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "S1.2",
+      "title": "Session Management",
+      "description": "As a user, I want to log into Twitter once and have my session saved so that subsequent collection runs don't require manual login.",
+      "acceptanceCriteria": [
+        "Running python src/auth.py opens a Chromium browser to twitter.com for manual login",
+        "After login, browser state is saved to session/twitter_state.json",
+        "load_session() launches browser with saved state and verifies login succeeded",
+        "If session is missing or expired, a clear error message is shown with instructions to re-authenticate",
+        "session/ directory is gitignored"
+      ],
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "S1.3",
+      "title": "GraphQL Response Interception",
+      "description": "As a collector, I want to intercept Twitter's GraphQL API responses when the home feed loads so that I get structured tweet data without DOM scraping.",
+      "acceptanceCriteria": [
+        "page.on('response') listener intercepts responses matching URL pattern */i/api/graphql/*/Home*",
+        "Raw JSON response bodies are captured from HomeTimeline and/or HomeLatestTimeline endpoints",
+        "Each intercepted response is logged with: endpoint name, HTTP status, response size, number of tweet entries found",
+        "Raw responses are saved to feed_data/YYYY-MM-DD/raw/ for debugging",
+        "Interception works with a saved session (no manual login needed during collection)"
+      ],
+      "priority": 3,
+      "passes": false
+    },
+    {
+      "id": "S1.4",
+      "title": "Tweet Data Parsing",
+      "description": "As a collector, I want intercepted GraphQL responses parsed into structured tweet objects so that downstream systems have clean, usable data.",
+      "acceptanceCriteria": [
+        "Tweet dataclass defined with fields: id, text, author_handle, author_name, created_at, likes, retweets, replies, quotes, media_urls, is_retweet, original_author",
+        "Parser navigates Twitter's nested JSON structure to extract tweet data from timeline entries",
+        "Retweets are identified and original author is captured",
+        "Promoted/ad tweets are flagged or skipped",
+        "Tweets with missing fields (e.g., media-only tweets) are handled gracefully without crashes",
+        "At least 10 tweets are successfully parsed from a single interception"
+      ],
+      "priority": 4,
+      "passes": false
+    },
+    {
+      "id": "S1.5",
+      "title": "Structured Data Output",
+      "description": "As a collector, I want parsed tweets saved as structured JSON files so that data persists between runs and is ready for the curation layer.",
+      "acceptanceCriteria": [
+        "Parsed tweets are saved to feed_data/YYYY-MM-DD/tweets.json",
+        "JSON is pretty-printed and human-readable",
+        "Output includes collection metadata: run timestamp, tweet count, collection duration",
+        "Running the collector end-to-end (load session -> navigate -> intercept -> parse -> save) produces a valid tweets.json file",
+        "tweets.json can be loaded back into Tweet dataclass objects without errors"
+      ],
+      "priority": 5,
+      "passes": false
+    },
+    {
+      "id": "S2.1",
+      "title": "Scroll Automation",
+      "description": "As a collector, I want the browser to automatically scroll the Twitter feed so that more tweets are loaded and captured beyond the initial page.",
+      "acceptanceCriteria": [
+        "scroll_feed() scrolls the page down and waits a random delay between config scroll_delay_min and scroll_delay_max",
+        "Scrolling triggers new GraphQL responses which are intercepted and parsed",
+        "Scroll loop detects when no new tweets are being loaded (stale detection after N scrolls with no new tweets)",
+        "Scroll behavior is logged: scroll count, new tweets per scroll, total tweets so far"
+      ],
+      "priority": 6,
+      "passes": false
+    },
+    {
+      "id": "S2.2",
+      "title": "Configurable Stop Conditions",
+      "description": "As a user, I want to configure when the collector stops so that I can control collection depth and duration.",
+      "acceptanceCriteria": [
+        "Stop conditions are configurable in config.json: max_tweets, max_minutes, oldest_tweet_date",
+        "Collection stops when ANY stop condition is met (whichever comes first)",
+        "The reason for stopping is logged clearly",
+        "Default: collect up to 50 tweets or 5 minutes, whichever comes first"
+      ],
+      "priority": 7,
+      "passes": false
+    },
+    {
+      "id": "S2.3",
+      "title": "Tweet Deduplication",
+      "description": "As a collector, I want duplicate tweets skipped so that repeated runs don't create redundant data.",
+      "acceptanceCriteria": [
+        "Tweets already present in the current day's tweets.json are not added again",
+        "Deduplication is by tweet ID",
+        "Number of duplicates skipped is tracked and reported",
+        "Within a single run, the same tweet appearing in multiple GraphQL responses is only stored once"
+      ],
+      "priority": 8,
+      "passes": false
+    },
+    {
+      "id": "S2.4",
+      "title": "Image Download",
+      "description": "As a collector, I want images from tweets downloaded locally so that the full content is preserved offline.",
+      "acceptanceCriteria": [
+        "Images are downloaded from media_url_https URLs with ?format=jpg&name=large suffix",
+        "Images are saved to feed_data/YYYY-MM-DD/media/{tweet_id}_{index}.jpg",
+        "Tweet JSON is updated with local_media_paths field pointing to downloaded files",
+        "Failed downloads are logged but do not crash the collector",
+        "Download progress is shown (X of Y images downloaded)"
+      ],
+      "priority": 9,
+      "passes": false
+    },
+    {
+      "id": "S2.5",
+      "title": "Collection Run Summary",
+      "description": "As a user, I want a summary printed after each collection run so that I know what was captured.",
+      "acceptanceCriteria": [
+        "After collection completes, a summary is printed with: total tweets captured, new tweets (non-duplicate), images downloaded, total run time, reason for stopping",
+        "Summary is also appended to feed_data/YYYY-MM-DD/run_log.json",
+        "Summary includes any errors or warnings encountered during the run"
+      ],
+      "priority": 10,
+      "passes": false
+    }
+  ]
+}

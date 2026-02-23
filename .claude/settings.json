@@ -1,0 +1,8 @@
+{
+  "allowedCommands": [
+    "pip install playwright",
+    "playwright install chromium",
+    "python *.py",
+    "pip install gallery-dl yt-dlp"
+  ]
+}

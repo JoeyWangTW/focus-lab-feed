@@ -1,0 +1,34 @@
+# Project Status
+
+**Last updated:** 2026-02-22
+
+**Current state:** Planned -- ready for Sprint 1 execution
+
+## Recently Completed
+
+- Project created
+- Co-founder discussion on architecture and approach
+- Technical research on Twitter/X GraphQL API, DOM structure, and reference projects
+- VP planning session: roadmap sharpened, sprint plan locked, prd.json populated with user stories
+
+## In Progress
+
+- (ready to begin Sprint 1 -- waiting for Ralph or manual execution)
+
+## Up Next (Sprint 1 -- This Week)
+
+1. **S1.1 - Project Scaffolding:** Create `src/` structure, requirements.txt, config.json, .gitignore
+2. **S1.2 - Session Management:** Browser login flow, save/load storage_state
+3. **S1.3 - GraphQL Interception:** Intercept HomeTimeline responses via page.on("response")
+4. **S1.4 - Tweet Parsing:** Extract structured tweet data from nested JSON
+5. **S1.5 - Data Output:** Save parsed tweets as JSON to feed_data/
+
+## Sprint 1 Done Criteria
+
+- Can load a saved Twitter session, navigate to home feed, intercept GraphQL responses, parse tweets, and save structured JSON
+- At least 10 tweets captured in a single run
+- Human can read the output JSON and see real tweet data
+
+## Blockers
+
+- (none -- requires a Twitter/X account with active session for testing)
