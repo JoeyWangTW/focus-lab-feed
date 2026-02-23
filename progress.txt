@@ -5,6 +5,12 @@
 - Config loaded from `config.json` at project root
 - Use `dataclasses` for data models (Tweet, etc.)
 - aiohttp used for async HTTP downloads (media_downloader.py)
+- Twitter tweet data path: `data.home.home_timeline_urt.instructions[].entries[].content.itemContent.tweet_results.result`
+- `TweetWithVisibilityResults` is a wrapper typename — unwrap via `.tweet` to get the real tweet result
+- Retweets have `legacy.retweeted_status_result.result` containing the original tweet
+- Promoted tweets have `itemContent.promotedMetadata` in the entry
+- Cursor entries have `itemType: "TimelineCursor"` — skip these when parsing tweets
+- `extended_entities.media` has all media; `entities.media` only has the first — prefer extended_entities
 - Use `source .venv/bin/activate` before running python commands (venv required due to externally-managed Python)
 - Use `wait_until="domcontentloaded"` for Twitter page loads — `networkidle` may never fire due to constant streaming
 - Twitter login redirect check: look for both `/login` and `/i/flow/login` in URL
@@ -62,4 +68,20 @@
   - Playwright's `page.on("response")` handler must be async to call `await response.json()`
   - Use microsecond timestamps in filenames to prevent collisions from rapid-fire responses
   - The extended wait (5s + 5s fallback) gives enough time for Twitter's lazy GraphQL responses
+---
+
+## 2026-02-22 - S1.4 Tweet Data Parsing
+- Added parsing methods to `ResponseInterceptor`: `parse_all_tweets()`, `_parse_entry()`, `_parse_tweet_result()`, `_extract_author()`, `_extract_media_urls()`
+- Parser navigates nested JSON structure to extract Tweet dataclass objects from timeline entries
+- Handles retweets (via `retweeted_status_result`), promoted tweets (via `promotedMetadata`), TweetWithVisibilityResults wrappers
+- Missing fields handled gracefully — defaults to empty strings, zero counts, empty lists
+- Wired parsing + saving into collector.py end-to-end flow
+- Created `tests/test_parser.py` with 12 tests (all passing) covering: basic tweets, media, ads, retweets, cursors, wrappers, missing fields, empty responses, dedup, batch parsing, malformed entries
+- Files changed: src/interceptor.py, src/collector.py, requirements.txt, tests/__init__.py, tests/test_parser.py
+- **Learnings for future iterations:**
+  - Twitter wraps some tweets in `TweetWithVisibilityResults` — always check `__typename` and unwrap
+  - `extended_entities.media` has the full media list; `entities.media` only has the first item
+  - Retweet structure: outer tweet has retweeter as author, inner `retweeted_status_result.result` has original content
+  - Cursor entries mixed in with tweet entries — filter by `itemType == "TimelineTweet"`
+  - pytest needed installing into venv — added to requirements.txt
 ---

@@ -12,6 +12,7 @@ from playwright.async_api import async_playwright
 
 from src.auth import load_session
 from src.interceptor import ResponseInterceptor
+from src.storage import save_tweets
 
 
 def load_config() -> dict:
@@ -68,7 +69,16 @@ async def main():
             count = len(interceptor.responses)
             print(f"[collector] After extended wait: {count} response(s) captured.")
 
-        print(f"[collector] Collection complete. {count} raw response(s) saved.")
+        # Parse tweets from captured responses
+        tweets = interceptor.parse_all_tweets(skip_ads=True)
+
+        if tweets:
+            tweets_file = save_tweets(tweets, output_dir)
+            print(f"[collector] Saved {len(tweets)} tweets to {tweets_file}")
+        else:
+            print("[collector] No tweets parsed from responses.")
+
+        print(f"[collector] Collection complete. {count} raw response(s), {len(tweets)} tweets parsed.")
         await browser.close()
 
 

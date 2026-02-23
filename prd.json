@@ -58,7 +58,7 @@
         "At least 10 tweets are successfully parsed from a single interception"
       ],
       "priority": 4,
-      "passes": false
+      "passes": true
     },
     {
       "id": "S1.5",

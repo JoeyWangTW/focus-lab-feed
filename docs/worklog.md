@@ -49,3 +49,18 @@
 - Added `sys.path` fix in collector.py so `python3 src/collector.py` works with `from src.` imports
 - Graceful error handling for missing/expired sessions
 - Files changed: src/collector.py, src/interceptor.py
+
+## 2026-02-22 - S1.4 Tweet Data Parsing complete
+
+- Added `parse_all_tweets()`, `_parse_entry()`, `_parse_tweet_result()`, `_extract_author()`, `_extract_media_urls()` to `ResponseInterceptor`
+- Parser navigates Twitter's nested JSON: data.home.home_timeline_urt.instructions[].entries[].content.itemContent.tweet_results.result
+- Handles `TweetWithVisibilityResults` wrapper (unwraps to inner tweet)
+- Retweets detected via `retweeted_status_result` — original author tracked, inner tweet content used
+- Promoted/ad tweets detected via `promotedMetadata` — skipped by default
+- Missing fields handled gracefully (empty strings, zero counts, empty lists)
+- Cursor entries and non-tweet items filtered out
+- Deduplication by tweet ID across multiple responses
+- Wired parser into `collector.py` — parse + save after interception
+- Created test suite with 12 tests covering all acceptance criteria
+- Added pytest to requirements.txt
+- Files changed: src/interceptor.py, src/collector.py, requirements.txt, tests/test_parser.py
