@@ -9,6 +9,9 @@
 - Use `wait_until="domcontentloaded"` for Twitter page loads — `networkidle` may never fire due to constant streaming
 - Twitter login redirect check: look for both `/login` and `/i/flow/login` in URL
 - Validate session JSON before passing to Playwright to catch corrupted files early
+- `sys.path.insert(0, ...)` needed in entry-point scripts that use `from src.` imports when run as `python3 src/file.py`
+- Interceptor uses `page.on("response", handler)` — handler must be async since it calls `await response.json()`
+- Reload page after attaching interceptor to capture initial timeline GraphQL requests
 
 ---
 
@@ -42,4 +45,21 @@
   - Twitter redirects to `/i/flow/login` (not just `/login`) when session is expired
   - `networkidle` wait strategy is unreliable for Twitter — use `domcontentloaded` + explicit timeout
   - load_session() takes a playwright instance as parameter — caller manages async_playwright() context
+---
+
+## 2026-02-22 - S1.3 GraphQL Response Interception
+- Wired up `collector.py` with `load_session()` and `ResponseInterceptor` for end-to-end interception
+- Flow: load session → attach `page.on("response")` → reload page → capture GraphQL responses → save raw JSON
+- Interceptor pattern: `/i/api/graphql/.*/Home` matches HomeTimeline and HomeLatestTimeline
+- Each response logged with: endpoint name, HTTP status, response size, entry count
+- Raw responses saved to `feed_data/YYYY-MM-DD/raw/{endpoint}_{timestamp}.json` with microsecond precision
+- Added `sys.path` fix so `python3 src/collector.py` resolves `from src.` imports
+- Graceful handling: missing session → clear error message, no crash
+- Files changed: src/collector.py, src/interceptor.py, prd.json, docs/status.md, docs/worklog.md
+- **Learnings for future iterations:**
+  - Must reload the page after attaching `page.on("response")` to capture the initial timeline API call
+  - `sys.path.insert(0, ...)` is needed at top of entry-point scripts for `from src.` imports to work
+  - Playwright's `page.on("response")` handler must be async to call `await response.json()`
+  - Use microsecond timestamps in filenames to prevent collisions from rapid-fire responses
+  - The extended wait (5s + 5s fallback) gives enough time for Twitter's lazy GraphQL responses
 ---

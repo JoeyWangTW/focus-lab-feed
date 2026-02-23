@@ -32,7 +32,7 @@ class ResponseInterceptor:
             raw_dir = self.output_dir / today / "raw"
             raw_dir.mkdir(parents=True, exist_ok=True)
 
-            timestamp = datetime.now().strftime("%H%M%S")
+            timestamp = datetime.now().strftime("%H%M%S_%f")
             raw_path = raw_dir / f"{endpoint}_{timestamp}.json"
             raw_path.write_text(json.dumps(body, indent=2))
 

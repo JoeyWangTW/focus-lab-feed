@@ -43,7 +43,7 @@
         "Interception works with a saved session (no manual login needed during collection)"
       ],
       "priority": 3,
-      "passes": false
+      "passes": true
     },
     {
       "id": "S1.4",

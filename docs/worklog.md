@@ -37,3 +37,15 @@
 - Created `requirements.txt` (playwright, aiohttp), `config.json`, `.gitignore`
 - Verified `python3 src/collector.py` runs cleanly and models instantiate correctly
 - Branch: `milestone-1-twitter-collection`
+
+## 2026-02-22 - S1.3 GraphQL Response Interception complete
+
+- Wired up `collector.py` with `auth.load_session()` and `interceptor.ResponseInterceptor`
+- End-to-end flow: load session → attach page.on("response") → reload page → capture GraphQL responses → save raw JSON
+- Interceptor pattern matches `*/i/api/graphql/*/Home*` (HomeTimeline, HomeLatestTimeline)
+- Each response logged with: endpoint name, HTTP status, response size, entry count
+- Raw responses saved to `feed_data/YYYY-MM-DD/raw/{endpoint}_{timestamp}.json`
+- Added microsecond precision to raw filenames to prevent collisions
+- Added `sys.path` fix in collector.py so `python3 src/collector.py` works with `from src.` imports
+- Graceful error handling for missing/expired sessions
+- Files changed: src/collector.py, src/interceptor.py
