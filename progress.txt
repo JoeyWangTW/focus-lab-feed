@@ -20,6 +20,9 @@
 - `sys.path.insert(0, ...)` needed in entry-point scripts that use `from src.` imports when run as `python3 src/file.py`
 - Interceptor uses `page.on("response", handler)` — handler must be async since it calls `await response.json()`
 - Reload page after attaching interceptor to capture initial timeline GraphQL requests
+- pytest-asyncio required for async test functions — use `@pytest.mark.asyncio` decorator
+- scroll_loop() uses interceptor.parse_all_tweets() to count tweets — keeps interceptor as single source of truth
+- Use `page.wait_for_timeout(2000)` after scroll to let GraphQL responses arrive before counting
 
 ---
 
@@ -99,4 +102,18 @@
   - `time.monotonic()` is better than `time.time()` for measuring durations (immune to system clock changes)
   - `tmp_path` pytest fixture is ideal for testing file I/O without polluting real directories
   - Storage format: `{"metadata": {...}, "tweets": [...]}` — metadata at top level, tweets array separate
+---
+
+## 2026-02-22 - S2.1 Scroll Automation
+- Implemented `scroll_loop()` in `src/scroller.py` — orchestrates scroll + intercept cycle
+- `scroll_feed()` does single scroll with random delay; `scroll_loop()` wraps it with stale detection and max_tweets
+- Updated `collector.py` to call `scroll_loop()` after initial page load, feeding config values
+- 9 async tests in `tests/test_scroller.py` using `FakeInterceptor` mock pattern
+- Added `pytest-asyncio` dependency for async test support
+- Files changed: src/scroller.py, src/collector.py, requirements.txt, tests/test_scroller.py, prd.json, docs/status.md, docs/worklog.md
+- **Learnings for future iterations:**
+  - `pytest-asyncio` required for `@pytest.mark.asyncio` tests — plain pytest doesn't support async
+  - `FakeInterceptor` with `tweet_schedule` list is effective for testing scroll loops without real browser
+  - `page.wait_for_timeout(2000)` after scroll gives time for GraphQL responses to arrive before parsing
+  - scroll_loop reuses `interceptor.parse_all_tweets()` to count — keeps interceptor as single source of truth
 ---

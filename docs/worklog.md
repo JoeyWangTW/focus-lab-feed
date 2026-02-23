@@ -75,3 +75,18 @@
 - Created `tests/test_storage.py` with 12 tests: save, pretty-print, metadata, round-trip, all fields
 - All 24 tests pass (12 parser + 12 storage)
 - Files changed: src/storage.py, src/collector.py, tests/test_storage.py
+
+## 2026-02-22 - S2.1 Scroll Automation complete
+
+- Enhanced `src/scroller.py` with `scroll_loop()` function that orchestrates scrolling with the interceptor
+- `scroll_feed()` scrolls one viewport height down with random delay between `scroll_delay_min` and `scroll_delay_max`
+- `scroll_loop()` scrolls continuously, parsing tweets after each scroll via interceptor
+- Stale detection: stops after N consecutive scrolls with no new tweets (default stale_limit=3)
+- Max tweets stop condition: stops when enough tweets collected
+- Detailed logging per scroll: scroll number, new tweets, total tweets, delay used
+- Updated `collector.py` to use `scroll_loop()` after initial page load, passing config values
+- Final summary includes scroll count, total tweets, and stop reason
+- Created `tests/test_scroller.py` with 9 async tests covering: single scroll, max_tweets stop, stale detection, stale reset, zero tweets, delay range, dict keys
+- Added `pytest-asyncio` to requirements.txt for async test support
+- All 33 tests pass (12 parser + 9 scroller + 12 storage)
+- Files changed: src/scroller.py, src/collector.py, requirements.txt, tests/test_scroller.py

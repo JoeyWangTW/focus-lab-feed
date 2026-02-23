@@ -13,6 +13,7 @@ from playwright.async_api import async_playwright
 
 from src.auth import load_session
 from src.interceptor import ResponseInterceptor
+from src.scroller import scroll_loop
 from src.storage import save_tweets
 
 
@@ -61,7 +62,7 @@ async def main():
         # Wait for initial responses to arrive
         await page.wait_for_timeout(5000)
 
-        # Report what was captured
+        # Report what was captured from initial load
         count = len(interceptor.responses)
         print(f"[collector] Captured {count} GraphQL response(s) from initial page load.")
 
@@ -72,7 +73,20 @@ async def main():
             count = len(interceptor.responses)
             print(f"[collector] After extended wait: {count} response(s) captured.")
 
-        # Parse tweets from captured responses
+        # Scroll to collect more tweets
+        max_tweets = config.get("max_tweets", 50)
+        delay_min = config.get("scroll_delay_min", 2)
+        delay_max = config.get("scroll_delay_max", 5)
+
+        scroll_stats = await scroll_loop(
+            page,
+            interceptor,
+            delay_min=delay_min,
+            delay_max=delay_max,
+            max_tweets=max_tweets,
+        )
+
+        # Parse final tweet set
         tweets = interceptor.parse_all_tweets(skip_ads=True)
 
         # Calculate collection duration
@@ -83,7 +97,13 @@ async def main():
         else:
             print("[collector] No tweets parsed from responses.")
 
-        print(f"[collector] Collection complete. {count} raw response(s), {len(tweets)} tweets parsed in {duration:.1f}s.")
+        total_responses = len(interceptor.responses)
+        print(
+            f"[collector] Collection complete. "
+            f"{total_responses} raw response(s), {len(tweets)} tweets parsed, "
+            f"{scroll_stats['scroll_count']} scrolls in {duration:.1f}s. "
+            f"Stop reason: {scroll_stats['stop_reason']}"
+        )
         await browser.close()
 
 

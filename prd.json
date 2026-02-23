@@ -85,7 +85,7 @@
         "Scroll behavior is logged: scroll count, new tweets per scroll, total tweets so far"
       ],
       "priority": 6,
-      "passes": false
+      "passes": true
     },
     {
       "id": "S2.2",
