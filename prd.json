@@ -125,7 +125,7 @@
         "Download progress is shown (X of Y images downloaded)"
       ],
       "priority": 9,
-      "passes": false
+      "passes": true
     },
     {
       "id": "S2.5",

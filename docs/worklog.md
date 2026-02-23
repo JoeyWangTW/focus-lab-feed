@@ -114,3 +114,19 @@
 - Created `tests/test_dedup.py` with 9 tests: no existing file, all duplicates, partial overlap, order preservation, ID-based dedup, empty input, multi-run accumulation, within-run across responses, within-run same response
 - All 53 tests pass (12 parser + 9 dedup + 20 scroller + 12 storage)
 - Files changed: src/storage.py, src/interceptor.py, src/collector.py, tests/test_dedup.py, docs/status.md, docs/worklog.md
+
+## 2026-02-22 - S2.4 Image Download complete
+
+- Enhanced `src/media_downloader.py` with `download_tweet_images()` and `_image_download_url()` helper
+- `download_tweet_images()` iterates over all tweets, downloads images via aiohttp, updates `local_media_paths` in-place
+- Images downloaded with `?format=jpg&name=large` suffix for best quality
+- Images saved to `feed_data/YYYY-MM-DD/media/{tweet_id}_{index}.jpg`
+- Reuses a single aiohttp session for all downloads (efficient)
+- Failed downloads logged but don't crash — returns (downloaded, failed) counts
+- Progress printed for each image: "X of Y images processed"
+- Updated `src/collector.py` to call `download_tweet_images()` after dedup, before save
+- Collector summary now includes image download stats
+- `download_image()` refactored to accept session parameter (no session-per-image overhead)
+- Created `tests/test_media_downloader.py` with 12 tests: URL formatting, success, dirs, HTTP errors, exceptions, no-media, paths, local_media_paths, failures, mixed results, suffix verification
+- All 65 tests pass (12 parser + 9 dedup + 20 scroller + 12 storage + 12 media)
+- Files changed: src/media_downloader.py, src/collector.py, tests/test_media_downloader.py, docs/status.md, docs/worklog.md

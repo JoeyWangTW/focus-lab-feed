@@ -18,17 +18,18 @@
 - **S2.1 - Scroll Automation:** scroll_loop() with stale detection, logging, max_tweets stop condition
 - **S2.2 - Configurable Stop Conditions:** max_tweets, max_minutes, oldest_tweet_date — any condition stops collection
 - **S2.3 - Tweet Deduplication:** Cross-run and within-run dedup by tweet ID, with duplicate reporting
+- **S2.4 - Image Download:** Downloads tweet images with ?format=jpg&name=large, saves to media/, updates local_media_paths
 
 ## In Progress
 
-- **S2.4 - Image Download:** Download tweet images locally (next up)
+- **S2.5 - Collection Run Summary:** Print and save run summary (next up)
 
 ## Up Next (Sprint 2)
 
 1. ~~**S2.1 - Scroll Automation:** Auto-scroll feed with random delays~~ DONE
 2. ~~**S2.2 - Configurable Stop Conditions:** max_tweets, max_minutes, oldest_tweet_date~~ DONE
 3. ~~**S2.3 - Tweet Deduplication:** Skip duplicate tweets across runs~~ DONE
-4. **S2.4 - Image Download:** Download tweet images locally
+4. ~~**S2.4 - Image Download:** Download tweet images locally~~ DONE
 5. **S2.5 - Collection Run Summary:** Print and save run summary
 
 ## Completed (Sprint 1)

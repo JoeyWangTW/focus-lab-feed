@@ -11,6 +11,9 @@
 - Promoted tweets have `itemContent.promotedMetadata` in the entry
 - Cursor entries have `itemType: "TimelineCursor"` — skip these when parsing tweets
 - `extended_entities.media` has all media; `entities.media` only has the first — prefer extended_entities
+- Reuse a single `aiohttp.ClientSession` for batch downloads — don't create one per request
+- Twitter media URLs may have existing query params — strip with `.split("?")[0]` before adding `?format=jpg&name=large`
+- Store relative paths in `local_media_paths` (from output_dir) for portability
 - Use `dataclasses.asdict()` for serialization (not `__dict__`) — handles nested dataclasses correctly
 - tweets.json format: `{"metadata": {...}, "tweets": [...]}` — metadata at top level
 - Use `source .venv/bin/activate` before running python commands (venv required due to externally-managed Python)
@@ -151,4 +154,24 @@
   - Dedup by ID is simple set lookup — keep existing tweet when duplicate (don't overwrite with newer version)
   - Cross-run dedup merges existing + fresh; within-run dedup uses dict keyed by ID
   - Test `tmp_path` fixture creates isolated dirs per test — perfect for testing multi-run accumulation
+---
+
+## 2026-02-22 - S2.4 Image Download
+- Implemented `download_tweet_images()` in `src/media_downloader.py` — downloads all images from tweet media_urls
+- `_image_download_url()` strips existing query params and adds `?format=jpg&name=large`
+- Refactored `download_image()` to accept session param instead of creating one per image
+- Images saved to `feed_data/YYYY-MM-DD/media/{tweet_id}_{index}.jpg`
+- Updates `tweet.local_media_paths` in-place with relative paths from output_dir
+- Failed downloads logged but don't crash — returns (downloaded, failed) tuple
+- Progress output: "X of Y images processed" per image
+- Wired into `collector.py` after dedup, before save; summary includes download stats
+- Created 12 tests in `tests/test_media_downloader.py`
+- All 65 tests pass
+- Files changed: src/media_downloader.py, src/collector.py, tests/test_media_downloader.py, prd.json, docs/status.md, docs/worklog.md
+- **Learnings for future iterations:**
+  - Reuse a single `aiohttp.ClientSession` for all downloads — creating one per image is wasteful
+  - Use `FakeResponse` and `FakeSession` classes for testing aiohttp without real HTTP requests
+  - Store relative paths (from output_dir) in `local_media_paths` for portability — not absolute paths
+  - `patch("src.media_downloader.aiohttp.ClientSession", return_value=FakeSession())` cleanly mocks the session context manager
+  - Twitter media URLs may already have query params — always strip before appending format suffix
 ---

@@ -13,6 +13,7 @@ from playwright.async_api import async_playwright
 
 from src.auth import load_session
 from src.interceptor import ResponseInterceptor
+from src.media_downloader import download_tweet_images
 from src.scroller import scroll_loop
 from src.storage import deduplicate_tweets, save_tweets
 
@@ -100,9 +101,15 @@ async def main():
         if tweets:
             # Deduplicate against existing tweets from today's file
             merged, dupes_skipped = deduplicate_tweets(tweets, output_dir)
+
+            # Download images from tweets
+            downloaded, dl_failed = await download_tweet_images(merged, output_dir)
+
             save_tweets(merged, output_dir, duration_seconds=duration)
         else:
             dupes_skipped = 0
+            downloaded = 0
+            dl_failed = 0
             print("[collector] No tweets parsed from responses.")
 
         total_responses = len(interceptor.responses)
@@ -110,6 +117,7 @@ async def main():
             f"[collector] Collection complete. "
             f"{total_responses} raw response(s), {len(tweets)} tweets parsed, "
             f"{dupes_skipped} duplicates skipped, "
+            f"{downloaded} images downloaded ({dl_failed} failed), "
             f"{scroll_stats['scroll_count']} scrolls in {duration:.1f}s. "
             f"Stop reason: {scroll_stats['stop_reason']}"
         )
