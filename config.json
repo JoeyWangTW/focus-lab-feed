@@ -1,0 +1,7 @@
+{
+  "scroll_delay_min": 2,
+  "scroll_delay_max": 5,
+  "max_tweets": 50,
+  "max_minutes": 5,
+  "output_dir": "feed_data"
+}

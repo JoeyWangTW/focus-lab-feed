@@ -30,3 +30,10 @@
 - Initiated autonomous work session via `/tst:project-work`
 - Stories to complete: 10
 - Starting with: Project Scaffolding (S1.1)
+
+## 2026-02-22 - S1.1 Project Scaffolding complete
+
+- Created all 8 source files in `src/` with initial implementations
+- Created `requirements.txt` (playwright, aiohttp), `config.json`, `.gitignore`
+- Verified `python3 src/collector.py` runs cleanly and models instantiate correctly
+- Branch: `milestone-1-twitter-collection`

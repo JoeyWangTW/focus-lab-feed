@@ -1,3 +1,24 @@
 ## Codebase Patterns
+- Python 3.13 available via `python3` (not `python`) on this machine
+- Use `python3 src/collector.py` to run the main entry point
+- All source code in `src/` as a Python package with `__init__.py`
+- Config loaded from `config.json` at project root
+- Use `dataclasses` for data models (Tweet, etc.)
+- aiohttp used for async HTTP downloads (media_downloader.py)
 
+---
+
+## 2026-02-22 - S1.1 Project Scaffolding
+- Created `src/` directory with all module files: `__init__.py`, `collector.py`, `auth.py`, `interceptor.py`, `scroller.py`, `media_downloader.py`, `storage.py`, `models.py`
+- Created `requirements.txt` with playwright and aiohttp dependencies
+- Created `config.json` with default settings (scroll_delay_min: 2, scroll_delay_max: 5, max_tweets: 50, max_minutes: 5, output_dir: feed_data)
+- Created `.gitignore` excluding session/, feed_data/, __pycache__/, .venv/, *.pyc
+- Verified `python3 src/collector.py` runs without errors
+- Verified `src/models.py` Tweet dataclass instantiates correctly
+- Files changed: src/__init__.py, src/collector.py, src/auth.py, src/interceptor.py, src/scroller.py, src/media_downloader.py, src/storage.py, src/models.py, requirements.txt, config.json, .gitignore
+- **Learnings for future iterations:**
+  - `python` is not available, use `python3` on this machine
+  - Each module has stub implementations ready for the next stories to flesh out
+  - auth.py already has login_and_save_session() and load_session() stubs for S1.2
+  - interceptor.py already has ResponseInterceptor class with handle_response() for S1.3
 ---

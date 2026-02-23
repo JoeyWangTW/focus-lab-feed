@@ -1,0 +1,5 @@
+session/
+feed_data/
+__pycache__/
+.venv/
+*.pyc
