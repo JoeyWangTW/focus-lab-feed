@@ -64,3 +64,14 @@
 - Created test suite with 12 tests covering all acceptance criteria
 - Added pytest to requirements.txt
 - Files changed: src/interceptor.py, src/collector.py, requirements.txt, tests/test_parser.py
+
+## 2026-02-22 - S1.5 Structured Data Output complete
+
+- Enhanced `storage.py` with collection metadata (run_timestamp, tweet_count, collection_duration_seconds)
+- Used `dataclasses.asdict()` for proper serialization instead of `__dict__`
+- Added `load_tweets_from_file()` for loading from arbitrary paths and `load_metadata()` helper
+- Updated `collector.py` to track collection timing with `time.monotonic()` and pass duration to save_tweets
+- JSON output is pretty-printed with `indent=2` and `ensure_ascii=False`
+- Created `tests/test_storage.py` with 12 tests: save, pretty-print, metadata, round-trip, all fields
+- All 24 tests pass (12 parser + 12 storage)
+- Files changed: src/storage.py, src/collector.py, tests/test_storage.py

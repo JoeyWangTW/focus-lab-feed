@@ -72,7 +72,7 @@
         "tweets.json can be loaded back into Tweet dataclass objects without errors"
       ],
       "priority": 5,
-      "passes": false
+      "passes": true
     },
     {
       "id": "S2.1",

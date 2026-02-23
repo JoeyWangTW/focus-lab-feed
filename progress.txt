@@ -11,6 +11,8 @@
 - Promoted tweets have `itemContent.promotedMetadata` in the entry
 - Cursor entries have `itemType: "TimelineCursor"` — skip these when parsing tweets
 - `extended_entities.media` has all media; `entities.media` only has the first — prefer extended_entities
+- Use `dataclasses.asdict()` for serialization (not `__dict__`) — handles nested dataclasses correctly
+- tweets.json format: `{"metadata": {...}, "tweets": [...]}` — metadata at top level
 - Use `source .venv/bin/activate` before running python commands (venv required due to externally-managed Python)
 - Use `wait_until="domcontentloaded"` for Twitter page loads — `networkidle` may never fire due to constant streaming
 - Twitter login redirect check: look for both `/login` and `/i/flow/login` in URL
@@ -84,4 +86,17 @@
   - Retweet structure: outer tweet has retweeter as author, inner `retweeted_status_result.result` has original content
   - Cursor entries mixed in with tweet entries — filter by `itemType == "TimelineTweet"`
   - pytest needed installing into venv — added to requirements.txt
+---
+
+## 2026-02-22 - S1.5 Structured Data Output
+- Enhanced `storage.py`: metadata block (run_timestamp, tweet_count, collection_duration_seconds), `dataclasses.asdict()`, `load_tweets_from_file()`, `load_metadata()`
+- Updated `collector.py`: tracks timing with `time.monotonic()`, passes duration_seconds to save_tweets
+- Created `tests/test_storage.py` with 12 tests covering save, pretty-print, metadata, round-trip, all fields
+- All 24 tests passing (12 parser + 12 storage)
+- Files changed: src/storage.py, src/collector.py, tests/test_storage.py, prd.json, docs/status.md, docs/worklog.md
+- **Learnings for future iterations:**
+  - Use `dataclasses.asdict()` instead of `__dict__` for proper nested serialization
+  - `time.monotonic()` is better than `time.time()` for measuring durations (immune to system clock changes)
+  - `tmp_path` pytest fixture is ideal for testing file I/O without polluting real directories
+  - Storage format: `{"metadata": {...}, "tweets": [...]}` — metadata at top level, tweets array separate
 ---

@@ -3,6 +3,7 @@
 import asyncio
 import json
 import sys
+import time
 from pathlib import Path
 
 # Ensure project root is on sys.path when run directly (python3 src/collector.py)
@@ -34,6 +35,8 @@ async def main():
     config = load_config()
     output_dir = config.get("output_dir", "feed_data")
     print(f"[collector] Loaded config: {json.dumps(config, indent=2)}")
+
+    start_time = time.monotonic()
 
     # Set up interceptor
     interceptor = ResponseInterceptor(output_dir=output_dir)
@@ -72,13 +75,15 @@ async def main():
         # Parse tweets from captured responses
         tweets = interceptor.parse_all_tweets(skip_ads=True)
 
+        # Calculate collection duration
+        duration = time.monotonic() - start_time
+
         if tweets:
-            tweets_file = save_tweets(tweets, output_dir)
-            print(f"[collector] Saved {len(tweets)} tweets to {tweets_file}")
+            save_tweets(tweets, output_dir, duration_seconds=duration)
         else:
             print("[collector] No tweets parsed from responses.")
 
-        print(f"[collector] Collection complete. {count} raw response(s), {len(tweets)} tweets parsed.")
+        print(f"[collector] Collection complete. {count} raw response(s), {len(tweets)} tweets parsed in {duration:.1f}s.")
         await browser.close()
 
 
