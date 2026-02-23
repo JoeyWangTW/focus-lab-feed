@@ -111,7 +111,7 @@
         "Within a single run, the same tweet appearing in multiple GraphQL responses is only stored once"
       ],
       "priority": 8,
-      "passes": false
+      "passes": true
     },
     {
       "id": "S2.4",

@@ -58,6 +58,28 @@ def load_tweets_from_file(path: Path) -> list[Tweet]:
     return [Tweet(**t) for t in data.get("tweets", [])]
 
 
+def deduplicate_tweets(
+    new_tweets: list[Tweet], output_dir: str = "feed_data"
+) -> tuple[list[Tweet], int]:
+    """Merge new tweets with existing ones from today's file, deduplicating by ID.
+
+    Returns (merged_tweets, duplicates_skipped).
+    """
+    existing = load_tweets(output_dir)
+    existing_ids = {t.id for t in existing}
+
+    fresh = [t for t in new_tweets if t.id not in existing_ids]
+    duplicates_skipped = len(new_tweets) - len(fresh)
+
+    merged = existing + fresh
+    print(
+        f"[storage] Dedup: {len(new_tweets)} collected, "
+        f"{duplicates_skipped} duplicates skipped, "
+        f"{len(fresh)} new, {len(merged)} total"
+    )
+    return merged, duplicates_skipped
+
+
 def load_metadata(output_dir: str = "feed_data") -> Optional[dict]:
     """Load collection metadata from today's tweets.json if it exists."""
     today_dir = get_today_dir(output_dir)

@@ -14,7 +14,7 @@ from playwright.async_api import async_playwright
 from src.auth import load_session
 from src.interceptor import ResponseInterceptor
 from src.scroller import scroll_loop
-from src.storage import save_tweets
+from src.storage import deduplicate_tweets, save_tweets
 
 
 def load_config() -> dict:
@@ -98,14 +98,18 @@ async def main():
         duration = time.monotonic() - start_time
 
         if tweets:
-            save_tweets(tweets, output_dir, duration_seconds=duration)
+            # Deduplicate against existing tweets from today's file
+            merged, dupes_skipped = deduplicate_tweets(tweets, output_dir)
+            save_tweets(merged, output_dir, duration_seconds=duration)
         else:
+            dupes_skipped = 0
             print("[collector] No tweets parsed from responses.")
 
         total_responses = len(interceptor.responses)
         print(
             f"[collector] Collection complete. "
             f"{total_responses} raw response(s), {len(tweets)} tweets parsed, "
+            f"{dupes_skipped} duplicates skipped, "
             f"{scroll_stats['scroll_count']} scrolls in {duration:.1f}s. "
             f"Stop reason: {scroll_stats['stop_reason']}"
         )

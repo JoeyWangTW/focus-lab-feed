@@ -74,6 +74,7 @@ class ResponseInterceptor:
         """
         tweets_by_id: dict[str, Tweet] = {}
         ads_skipped = 0
+        dupes_within_run = 0
 
         for response_body in self.responses:
             entries = self._extract_entries(response_body)
@@ -84,13 +85,16 @@ class ResponseInterceptor:
                 if skip_ads and tweet.is_ad:
                     ads_skipped += 1
                     continue
-                if tweet.id not in tweets_by_id:
+                if tweet.id in tweets_by_id:
+                    dupes_within_run += 1
+                else:
                     tweets_by_id[tweet.id] = tweet
 
         tweets = list(tweets_by_id.values())
         print(
-            f"[parser] Parsed {len(tweets)} tweets "
-            f"({ads_skipped} ads skipped) from {len(self.responses)} response(s)"
+            f"[parser] Parsed {len(tweets)} unique tweets "
+            f"({dupes_within_run} within-run duplicates, "
+            f"{ads_skipped} ads skipped) from {len(self.responses)} response(s)"
         )
         return tweets
 

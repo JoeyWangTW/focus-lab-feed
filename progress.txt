@@ -135,4 +135,20 @@
   - For date comparison, use `.date()` on both sides to avoid timezone-naive vs timezone-aware issues
   - `FakeDateInterceptor` with `tweet_batches: list[list[Tweet]]` enables date-specific test scenarios
   - Time check fires at top of while loop before scrolling — a timed-out loop reports scroll_count=0 if it expires before the first scroll
+- `deduplicate_tweets()` returns (merged_list, dupes_count) — caller saves the merged list
+- `load_tweets()` returns empty list when no existing file — safe to call unconditionally
+---
+
+## 2026-02-22 - S2.3 Tweet Deduplication
+- Added `deduplicate_tweets()` to `storage.py` — loads existing tweets, merges with new, deduplicates by ID
+- Enhanced `parse_all_tweets()` in `interceptor.py` to track and report within-run duplicates
+- Updated `collector.py` to call `deduplicate_tweets()` before `save_tweets()`, duplicate count in summary
+- Created `tests/test_dedup.py` with 9 tests covering cross-run and within-run dedup scenarios
+- All 53 tests pass
+- Files changed: src/storage.py, src/interceptor.py, src/collector.py, tests/test_dedup.py, prd.json, docs/status.md, docs/worklog.md
+- **Learnings for future iterations:**
+  - `load_tweets()` safely returns [] when no file exists — no need for existence checks before calling
+  - Dedup by ID is simple set lookup — keep existing tweet when duplicate (don't overwrite with newer version)
+  - Cross-run dedup merges existing + fresh; within-run dedup uses dict keyed by ID
+  - Test `tmp_path` fixture creates isolated dirs per test — perfect for testing multi-run accumulation
 ---

@@ -103,3 +103,14 @@
 - Added 11 new tests: max_minutes stop, max_minutes not triggered, time-before-tweets priority, oldest_tweet_date stop, date not triggered, date on initial load, date parsing, invalid dates, has_tweet_older_than true/false/unparseable
 - All 44 tests pass (12 parser + 20 scroller + 12 storage)
 - Files changed: src/scroller.py, src/collector.py, config.json, tests/test_scroller.py, docs/status.md, docs/worklog.md
+
+## 2026-02-22 - S2.3 Tweet Deduplication complete
+
+- Added `deduplicate_tweets()` to `src/storage.py` — loads existing tweets from today's file, merges with new, reports duplicates
+- Updated `src/collector.py` to call `deduplicate_tweets()` before saving, dedup count shown in final summary
+- Enhanced `interceptor.py` `parse_all_tweets()` to track and report within-run duplicate count
+- Cross-run dedup: existing tweets loaded from `tweets.json`, new tweets matched by ID, duplicates skipped
+- Within-run dedup: same tweet appearing in multiple GraphQL responses stored only once (was already working, now reports count)
+- Created `tests/test_dedup.py` with 9 tests: no existing file, all duplicates, partial overlap, order preservation, ID-based dedup, empty input, multi-run accumulation, within-run across responses, within-run same response
+- All 53 tests pass (12 parser + 9 dedup + 20 scroller + 12 storage)
+- Files changed: src/storage.py, src/interceptor.py, src/collector.py, tests/test_dedup.py, docs/status.md, docs/worklog.md
