@@ -40,15 +40,20 @@ async def download_media(
     run_dir = get_current_run_dir(output_dir)
     media_dir = run_dir / "media"
 
-    # Collect all download tasks: (post, url, dest, is_video)
-    tasks: list[tuple[Post, str, Path, bool]] = []
+    # Collect all download tasks: (post, url, dest, is_video, platform)
+    tasks: list[tuple[Post, str, Path, bool, str]] = []
     for post in posts:
         for i, url in enumerate(post.media_urls):
-            dest = media_dir / f"{post.id}_{i}.jpg"
-            tasks.append((post, url, dest, False))
+            ext = "jpg"
+            if ".webp" in url:
+                ext = "webp"
+            elif ".png" in url:
+                ext = "png"
+            dest = media_dir / f"{post.id}_{i}.{ext}"
+            tasks.append((post, url, dest, False, post.platform))
         for i, url in enumerate(post.video_urls):
             dest = media_dir / f"{post.id}_v{i}.mp4"
-            tasks.append((post, url, dest, True))
+            tasks.append((post, url, dest, True, post.platform))
 
     if not tasks:
         print("[download] No media to download.")
@@ -59,8 +64,14 @@ async def download_media(
     failed = 0
 
     async with aiohttp.ClientSession() as session:
-        for idx, (post, url, dest, is_video) in enumerate(tasks, 1):
-            download_url = url if is_video else _image_download_url(url)
+        for idx, (post, url, dest, is_video, platform) in enumerate(tasks, 1):
+            # Only apply Twitter's format suffix for Twitter images
+            if is_video:
+                download_url = url
+            elif platform == "twitter":
+                download_url = _image_download_url(url)
+            else:
+                download_url = url
 
             success = await download_file(session, download_url, dest)
             if success:

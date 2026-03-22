@@ -24,11 +24,11 @@ async def run_platform(platform: str, config: dict):
         from src.platforms.twitter.collector import run
         return await run(config)
     elif platform == "threads":
-        print(f"[collect] Threads collector not yet implemented")
-        return None
+        from src.platforms.threads.collector import run
+        return await run(config)
     elif platform == "instagram":
-        print(f"[collect] Instagram collector not yet implemented")
-        return None
+        from src.platforms.instagram.collector import run
+        return await run(config)
     else:
         print(f"[collect] Unknown platform: {platform}")
         return None
