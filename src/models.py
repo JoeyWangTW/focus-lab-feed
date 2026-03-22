@@ -16,6 +16,7 @@ class Tweet:
     replies: int = 0
     quotes: int = 0
     media_urls: list[str] = field(default_factory=list)
+    video_urls: list[str] = field(default_factory=list)
     local_media_paths: list[str] = field(default_factory=list)
     is_retweet: bool = False
     original_author: Optional[str] = None

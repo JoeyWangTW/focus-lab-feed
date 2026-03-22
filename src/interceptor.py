@@ -13,9 +13,9 @@ class ResponseInterceptor:
 
     GRAPHQL_PATTERN = re.compile(r"/i/api/graphql/.*/Home")
 
-    def __init__(self, output_dir: str = "feed_data"):
+    def __init__(self, run_dir: Path):
         self.responses: list[dict] = []
-        self.output_dir = Path(output_dir)
+        self.run_dir = run_dir
 
     async def handle_response(self, response):
         """Callback for page.on('response') — captures matching GraphQL responses."""
@@ -30,8 +30,7 @@ class ResponseInterceptor:
             self.responses.append(body)
 
             # Save raw response for debugging
-            today = datetime.now().strftime("%Y-%m-%d")
-            raw_dir = self.output_dir / today / "raw"
+            raw_dir = self.run_dir / "raw"
             raw_dir.mkdir(parents=True, exist_ok=True)
 
             timestamp = datetime.now().strftime("%H%M%S_%f")
@@ -184,6 +183,7 @@ class ResponseInterceptor:
                         replies=inner.replies,
                         quotes=inner.quotes,
                         media_urls=inner.media_urls,
+                        video_urls=inner.video_urls,
                         is_retweet=True,
                         original_author=original_author,
                         is_ad=is_ad,
@@ -198,7 +198,7 @@ class ResponseInterceptor:
             quotes_count = legacy.get("quote_count", 0)
 
             # Extract media URLs from extended_entities (preferred) or entities
-            media_urls = self._extract_media_urls(legacy)
+            media_urls, video_urls = self._extract_media_urls(legacy)
 
             return Tweet(
                 id=tweet_id,
@@ -211,6 +211,7 @@ class ResponseInterceptor:
                 replies=replies_count,
                 quotes=quotes_count,
                 media_urls=media_urls,
+                video_urls=video_urls,
                 is_retweet=is_retweet,
                 original_author=original_author,
                 is_ad=is_ad,
@@ -223,31 +224,46 @@ class ResponseInterceptor:
     def _extract_author(self, core: dict) -> tuple[str, str]:
         """Extract (screen_name, display_name) from the core.user_results path."""
         try:
-            user_legacy = (
-                core.get("user_results", {})
-                .get("result", {})
-                .get("legacy", {})
-            )
-            return (
-                user_legacy.get("screen_name", ""),
-                user_legacy.get("name", ""),
-            )
+            user_result = core.get("user_results", {}).get("result", {})
+            # Twitter moved screen_name/name to user_results.result.core
+            user_core = user_result.get("core", {})
+            screen_name = user_core.get("screen_name", "")
+            name = user_core.get("name", "")
+            # Fallback to legacy path
+            if not screen_name:
+                user_legacy = user_result.get("legacy", {})
+                screen_name = user_legacy.get("screen_name", "")
+                name = name or user_legacy.get("name", "")
+            return (screen_name, name)
         except (AttributeError, TypeError):
             return ("", "")
 
-    def _extract_media_urls(self, legacy: dict) -> list[str]:
-        """Extract media URLs from tweet legacy data.
+    def _extract_media_urls(self, legacy: dict) -> tuple[list[str], list[str]]:
+        """Extract image and video URLs from tweet legacy data.
 
         Prefers extended_entities over entities for full media list.
+        Returns (image_urls, video_urls).
         """
-        urls = []
-        # extended_entities has all media (entities only has first)
+        image_urls = []
+        video_urls = []
         media_source = legacy.get("extended_entities", legacy.get("entities", {}))
         media_items = media_source.get("media", [])
 
         for item in media_items:
-            url = item.get("media_url_https", "")
-            if url:
-                urls.append(url)
+            media_type = item.get("type", "")
+            if media_type in ("video", "animated_gif"):
+                # Pick highest bitrate mp4 variant
+                variants = item.get("video_info", {}).get("variants", [])
+                mp4s = [
+                    v for v in variants
+                    if v.get("content_type") == "video/mp4"
+                ]
+                if mp4s:
+                    best = max(mp4s, key=lambda v: v.get("bitrate", 0))
+                    video_urls.append(best["url"])
+            else:
+                url = item.get("media_url_https", "")
+                if url:
+                    image_urls.append(url)
 
-        return urls
+        return image_urls, video_urls

@@ -26,8 +26,8 @@ def _has_tweet_older_than(tweets, oldest_dt: datetime) -> bool:
 
 
 async def scroll_feed(page, delay_min: float = 2.0, delay_max: float = 5.0):
-    """Scroll the page down once with a random delay."""
-    await page.evaluate("window.scrollBy(0, window.innerHeight)")
+    """Scroll to the bottom of loaded content to trigger infinite scroll loading."""
+    await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
     delay = random.uniform(delay_min, delay_max)
     await asyncio.sleep(delay)
     return delay
@@ -112,8 +112,8 @@ async def scroll_loop(
         delay = await scroll_feed(page, delay_min, delay_max)
         scroll_count += 1
 
-        # Wait briefly for GraphQL responses to arrive after scroll
-        await page.wait_for_timeout(2000)
+        # Wait for GraphQL responses to arrive after scroll
+        await page.wait_for_timeout(3000)
 
         # Count tweets now
         current_tweet_count = len(interceptor.parse_all_tweets(skip_ads=True))

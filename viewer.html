@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, max-width=640px, initial-scale=1">
+<title>Feed Collector Viewer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #15202b; color: #e7e9ea; max-width: 640px; margin: 0 auto; }
+  header { position: sticky; top: 0; background: rgba(21,32,43,0.85); backdrop-filter: blur(12px); padding: 16px 20px; border-bottom: 1px solid #38444d; z-index: 10; }
+  header h1 { font-size: 20px; font-weight: 700; }
+  header .meta { font-size: 13px; color: #8899a6; margin-top: 4px; }
+  .sort-bar { display: flex; gap: 8px; padding: 12px 20px; border-bottom: 1px solid #38444d; flex-wrap: wrap; }
+  .sort-bar button { background: none; border: 1px solid #38444d; color: #8899a6; padding: 6px 14px; border-radius: 20px; font-size: 13px; cursor: pointer; transition: all 0.15s; }
+  .sort-bar button:hover { border-color: #1da1f2; color: #1da1f2; }
+  .sort-bar button.active { background: #1da1f2; border-color: #1da1f2; color: #fff; }
+  .tweet { padding: 16px 20px; border-bottom: 1px solid #38444d; transition: background 0.15s; }
+  .tweet:hover { background: rgba(255,255,255,0.03); }
+  .tweet-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .author { font-weight: 700; font-size: 15px; }
+  .handle { color: #8899a6; font-size: 14px; margin-left: 6px; }
+  .time { color: #8899a6; font-size: 13px; white-space: nowrap; }
+  .retweet-badge { font-size: 12px; color: #8899a6; margin-bottom: 6px; }
+  .tweet-text { font-size: 15px; line-height: 1.5; margin-bottom: 10px; word-wrap: break-word; }
+  .tweet-text a { color: #1da1f2; text-decoration: none; }
+  .tweet-text a:hover { text-decoration: underline; }
+  .media { border-radius: 12px; overflow: hidden; margin-bottom: 10px; }
+  .media img { width: 100%; display: block; cursor: pointer; transition: opacity 0.15s; }
+  .media img:hover { opacity: 0.9; }
+  .media video { width: 100%; display: block; border-radius: 12px; }
+  .stats { display: flex; gap: 24px; color: #8899a6; font-size: 13px; }
+  .stats span { display: flex; align-items: center; gap: 4px; }
+  .no-data { padding: 60px 20px; text-align: center; color: #8899a6; }
+  .no-data h2 { margin-bottom: 12px; color: #e7e9ea; }
+  .no-data code { background: #22303c; padding: 2px 8px; border-radius: 4px; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Feed Collector</h1>
+  <div class="meta" id="meta"></div>
+</header>
+
+<div class="sort-bar" id="sort-bar">
+  <button data-sort="time" class="active">Latest</button>
+  <button data-sort="likes">Most Liked</button>
+  <button data-sort="retweets">Most RT'd</button>
+  <button data-sort="replies">Most Replies</button>
+</div>
+
+<main id="feed"></main>
+
+<div class="no-data" id="no-data" style="display:none">
+  <h2>No data loaded</h2>
+  <p>Drag and drop a <code>tweets.json</code> file here, or use the file picker below.</p>
+  <br>
+  <input type="file" id="file-picker" accept=".json">
+</div>
+
+<script>
+let tweets = [];
+let currentSort = 'time';
+
+async function init() {
+  // Fetch the feed_data directory listing to find the latest run
+  try {
+    const res = await fetch('feed_data/latest.json');
+    if (res.ok) {
+      const info = await res.json();
+      const dataRes = await fetch(`feed_data/${info.run_dir}/tweets.json`);
+      if (dataRes.ok) { loadData(await dataRes.json(), info.run_dir); return; }
+    }
+  } catch(e) {}
+
+  // Fallback: try index to find runs
+  try {
+    const res = await fetch('feed_data/');
+    if (res.ok) {
+      const html = await res.text();
+      // Parse directory listing for run folders (YYYY-MM-DD_HHMMSS format)
+      const matches = [...html.matchAll(/href="(\d{4}-\d{2}-\d{2}_\d{6})\/"/g)];
+      if (matches.length > 0) {
+        const latest = matches.map(m => m[1]).sort().pop();
+        const dataRes = await fetch(`feed_data/${latest}/tweets.json`);
+        if (dataRes.ok) { loadData(await dataRes.json(), latest); return; }
+      }
+      // Also try old date format (YYYY-MM-DD)
+      const dateMatches = [...html.matchAll(/href="(\d{4}-\d{2}-\d{2})\/"/g)];
+      if (dateMatches.length > 0) {
+        const latest = dateMatches.map(m => m[1]).sort().pop();
+        const dataRes = await fetch(`feed_data/${latest}/tweets.json`);
+        if (dataRes.ok) { loadData(await dataRes.json(), latest); return; }
+      }
+    }
+  } catch(e) {}
+
+  document.getElementById('no-data').style.display = 'block';
+  document.getElementById('sort-bar').style.display = 'none';
+}
+
+let currentRunDir = '';
+
+function loadData(data, runDir) {
+  currentRunDir = runDir || '';
+  document.getElementById('no-data').style.display = 'none';
+  document.getElementById('sort-bar').style.display = 'flex';
+
+  tweets = data.tweets || [];
+  const meta = data.metadata || {};
+  const vidCount = tweets.reduce((n, t) => n + (t.video_urls || []).length, 0);
+  const imgCount = tweets.reduce((n, t) => n + (t.media_urls || []).length, 0);
+  document.getElementById('meta').textContent =
+    `${tweets.length} tweets | ${imgCount} images, ${vidCount} videos | ` +
+    `${new Date(meta.run_timestamp).toLocaleString()} | ${(meta.collection_duration_seconds || 0).toFixed(0)}s run`;
+  renderTweets();
+}
+
+function formatText(text) {
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/(https?:\/\/t\.co\/\S+)/g, '')
+    .replace(/(https?:\/\/\S+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
+    .replace(/@(\w+)/g, '<a href="https://x.com/$1" target="_blank" rel="noopener">@$1</a>')
+    .replace(/#(\w+)/g, '<a href="https://x.com/hashtag/$1" target="_blank" rel="noopener">#$1</a>')
+    .trim();
+}
+
+function timeAgo(dateStr) {
+  const d = new Date(dateStr);
+  const diff = (Date.now() - d) / 1000;
+  if (diff < 60) return `${Math.floor(diff)}s`;
+  if (diff < 3600) return `${Math.floor(diff/60)}m`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}h`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function fmtNum(n) {
+  if (n >= 1000000) return (n/1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n/1000).toFixed(1) + 'K';
+  return n.toString();
+}
+
+function sortTweets(tweets, sort) {
+  const sorted = [...tweets];
+  switch(sort) {
+    case 'likes': sorted.sort((a,b) => b.likes - a.likes); break;
+    case 'retweets': sorted.sort((a,b) => b.retweets - a.retweets); break;
+    case 'replies': sorted.sort((a,b) => b.replies - a.replies); break;
+    default: sorted.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+  }
+  return sorted;
+}
+
+function renderTweets() {
+  const sorted = sortTweets(tweets, currentSort);
+  const feed = document.getElementById('feed');
+  feed.innerHTML = sorted.map(t => {
+    const authorDisplay = t.author_name || t.author_handle || 'Unknown';
+    const handleDisplay = t.author_handle ? `<a href="https://x.com/${t.author_handle}" target="_blank" rel="noopener">@${t.author_handle}</a>` : '';
+
+    // Build media HTML from local_media_paths (relative to feed_data/)
+    let mediaHtml = '';
+    for (const p of (t.local_media_paths || [])) {
+      const fullPath = p.startsWith('feed_data/') ? p : `feed_data/${p}`;
+      if (p.endsWith('.mp4')) {
+        mediaHtml += `<div class="media"><video src="${fullPath}" controls preload="metadata"></video></div>`;
+      } else {
+        mediaHtml += `<div class="media"><img src="${fullPath}" loading="lazy" onclick="window.open(this.src,'_blank')"></div>`;
+      }
+    }
+
+    const rtBadge = t.is_retweet
+      ? `<div class="retweet-badge">RT${t.original_author ? ' by @' + t.original_author : ''}</div>`
+      : '';
+
+    return `<div class="tweet">
+      ${rtBadge}
+      <div class="tweet-header">
+        <div><span class="author">${authorDisplay}</span><span class="handle">${handleDisplay}</span></div>
+        <span class="time">${timeAgo(t.created_at)}</span>
+      </div>
+      <div class="tweet-text">${formatText(t.text)}</div>
+      ${mediaHtml}
+      <div class="stats">
+        <span>replies ${fmtNum(t.replies)}</span>
+        <span>RT ${fmtNum(t.retweets)}</span>
+        <span>likes ${fmtNum(t.likes)}</span>
+        <span>quotes ${fmtNum(t.quotes || 0)}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Sort buttons
+document.getElementById('sort-bar').addEventListener('click', e => {
+  if (e.target.tagName !== 'BUTTON') return;
+  document.querySelectorAll('.sort-bar button').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+  currentSort = e.target.dataset.sort;
+  renderTweets();
+});
+
+// Drag & drop
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) { const r = new FileReader(); r.onload = () => loadData(JSON.parse(r.result)); r.readAsText(file); }
+});
+
+// File picker
+document.addEventListener('change', e => {
+  if (e.target.id !== 'file-picker') return;
+  const file = e.target.files[0];
+  if (file) { const r = new FileReader(); r.onload = () => loadData(JSON.parse(r.result)); r.readAsText(file); }
+});
+
+init();
+</script>
+</body>
+</html>

@@ -16,7 +16,7 @@ from src.auth import load_session
 from src.interceptor import ResponseInterceptor
 from src.media_downloader import download_tweet_images
 from src.scroller import scroll_loop
-from src.storage import deduplicate_tweets, save_run_summary, save_tweets
+from src.storage import deduplicate_within_run, get_run_dir, save_run_summary, save_tweets, set_run_dir
 
 
 def load_config() -> dict:
@@ -40,8 +40,8 @@ def print_summary(summary: dict):
     print("  Collection Run Summary")
     print("=" * 50)
     print(f"  Total tweets captured:  {summary['total_tweets']}")
-    print(f"  New tweets (non-dupe):  {summary['new_tweets']}")
-    print(f"  Duplicates skipped:     {summary['duplicates_skipped']}")
+    print(f"  Unique tweets:          {summary['unique_tweets']}")
+    print(f"  Duplicates removed:     {summary['duplicates_removed']}")
     print(f"  Images downloaded:      {summary['images_downloaded']}")
     print(f"  Image failures:         {summary['images_failed']}")
     print(f"  Scrolls performed:      {summary['scroll_count']}")
@@ -60,11 +60,16 @@ async def main():
     output_dir = config.get("output_dir", "feed_data")
     print(f"[collector] Loaded config: {json.dumps(config, indent=2)}")
 
+    # Create a unique run directory
+    run_dir = get_run_dir(output_dir)
+    set_run_dir(run_dir)
+    print(f"[collector] Run directory: {run_dir}")
+
     start_time = time.monotonic()
     warnings: list[str] = []
 
-    # Set up interceptor
-    interceptor = ResponseInterceptor(output_dir=output_dir)
+    # Set up interceptor — raw responses go into the run dir
+    interceptor = ResponseInterceptor(run_dir=run_dir)
 
     async with async_playwright() as p:
         try:
@@ -78,8 +83,6 @@ async def main():
         print("[collector] GraphQL interceptor attached. Listening for Home timeline responses...")
 
         # Navigate to home feed to trigger initial GraphQL load
-        # The page is already on /home from load_session, but we reload to
-        # ensure the interceptor captures the initial timeline request
         await page.reload(wait_until="domcontentloaded")
         print("[collector] Page reloaded. Waiting for GraphQL responses...")
 
@@ -123,19 +126,18 @@ async def main():
         duration = time.monotonic() - start_time
 
         if tweets:
-            # Deduplicate against existing tweets from today's file
-            merged, dupes_skipped = deduplicate_tweets(tweets, output_dir)
-            new_tweets = len(tweets) - dupes_skipped
+            # Deduplicate within this run
+            unique_tweets, dupes_removed = deduplicate_within_run(tweets)
 
-            # Download images from tweets
-            downloaded, dl_failed = await download_tweet_images(merged, output_dir)
+            # Download media (images + videos)
+            downloaded, dl_failed = await download_tweet_images(unique_tweets, output_dir)
             if dl_failed > 0:
-                warnings.append(f"{dl_failed} image download(s) failed")
+                warnings.append(f"{dl_failed} media download(s) failed")
 
-            save_tweets(merged, output_dir, duration_seconds=duration)
+            save_tweets(unique_tweets, run_dir, duration_seconds=duration)
         else:
-            dupes_skipped = 0
-            new_tweets = 0
+            unique_tweets = []
+            dupes_removed = 0
             downloaded = 0
             dl_failed = 0
             warnings.append("No tweets parsed from intercepted responses")
@@ -143,9 +145,10 @@ async def main():
         # Build summary
         summary = {
             "run_timestamp": datetime.now().isoformat(),
+            "run_dir": str(run_dir),
             "total_tweets": len(tweets),
-            "new_tweets": new_tweets,
-            "duplicates_skipped": dupes_skipped,
+            "unique_tweets": len(unique_tweets),
+            "duplicates_removed": dupes_removed,
             "images_downloaded": downloaded,
             "images_failed": dl_failed,
             "scroll_count": scroll_stats["scroll_count"],
@@ -155,7 +158,7 @@ async def main():
         }
 
         print_summary(summary)
-        save_run_summary(summary, output_dir)
+        save_run_summary(summary, run_dir)
 
         await browser.close()
 
