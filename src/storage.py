@@ -6,21 +6,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from src.models import Tweet
+from src.models import Post
 
 
-def get_run_dir(output_dir: str = "feed_data") -> Path:
-    """Return a unique run directory (timestamped), creating it if needed."""
+def get_run_dir(output_dir: str = "feed_data", platform: str = "unknown") -> Path:
+    """Return a unique run directory (timestamped + platform), creating it if needed."""
     timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    path = Path(output_dir) / timestamp
+    path = Path(output_dir) / f"{timestamp}_{platform}"
     path.mkdir(parents=True, exist_ok=True)
     return path
-
-
-# Keep backward compat for media_downloader which uses this
-def get_today_dir(output_dir: str = "feed_data") -> Path:
-    """Alias — returns the current run dir. Set by collector before use."""
-    return _current_run_dir or get_run_dir(output_dir)
 
 
 _current_run_dir: Optional[Path] = None
@@ -32,26 +26,33 @@ def set_run_dir(run_dir: Path):
     _current_run_dir = run_dir
 
 
-def save_tweets(
-    tweets: list[Tweet],
+def get_current_run_dir(output_dir: str = "feed_data") -> Path:
+    """Return the current run dir. Falls back to creating a new one."""
+    return _current_run_dir or get_run_dir(output_dir)
+
+
+def save_posts(
+    posts: list[Post],
     run_dir: Path,
+    platform: str = "unknown",
     duration_seconds: Optional[float] = None,
 ) -> Path:
-    """Save tweets to this run's tweets.json with collection metadata."""
-    tweets_file = run_dir / "tweets.json"
+    """Save posts to this run's posts.json with collection metadata."""
+    posts_file = run_dir / "posts.json"
 
     data = {
         "metadata": {
+            "platform": platform,
             "run_timestamp": datetime.now().isoformat(),
-            "tweet_count": len(tweets),
+            "post_count": len(posts),
             "collection_duration_seconds": round(duration_seconds, 2) if duration_seconds is not None else None,
         },
-        "tweets": [asdict(tweet) for tweet in tweets],
+        "posts": [asdict(post) for post in posts],
     }
 
-    tweets_file.write_text(json.dumps(data, indent=2, ensure_ascii=False))
-    print(f"[storage] Saved {len(tweets)} tweets to {tweets_file}")
-    return tweets_file
+    posts_file.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    print(f"[storage] Saved {len(posts)} posts to {posts_file}")
+    return posts_file
 
 
 def save_run_summary(summary: dict, run_dir: Path) -> Path:
@@ -62,21 +63,19 @@ def save_run_summary(summary: dict, run_dir: Path) -> Path:
     return log_file
 
 
-def deduplicate_within_run(tweets: list[Tweet]) -> tuple[list[Tweet], int]:
-    """Deduplicate tweets within a single run by ID.
-
-    Returns (unique_tweets, duplicates_skipped).
-    """
-    seen: dict[str, Tweet] = {}
-    for t in tweets:
-        if t.id not in seen:
-            seen[t.id] = t
-    dupes = len(tweets) - len(seen)
-    print(f"[storage] Dedup: {len(tweets)} collected, {dupes} duplicates removed, {len(seen)} unique")
+def deduplicate_within_run(posts: list[Post]) -> tuple[list[Post], int]:
+    """Deduplicate posts within a single run by ID."""
+    seen: dict[str, Post] = {}
+    for p in posts:
+        if p.id not in seen:
+            seen[p.id] = p
+    dupes = len(posts) - len(seen)
+    print(f"[storage] Dedup: {len(posts)} collected, {dupes} duplicates removed, {len(seen)} unique")
     return list(seen.values()), dupes
 
 
-def load_tweets_from_file(path: Path) -> list[Tweet]:
-    """Load tweets from a specific tweets.json file."""
+def load_posts_from_file(path: Path) -> list[Post]:
+    """Load posts from a posts.json or tweets.json file."""
     data = json.loads(path.read_text())
-    return [Tweet(**t) for t in data.get("tweets", [])]
+    posts_data = data.get("posts", data.get("tweets", []))
+    return [Post(**p) for p in posts_data]

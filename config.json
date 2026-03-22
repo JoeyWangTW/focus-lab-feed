@@ -1,8 +1,33 @@
 {
-  "scroll_delay_min": 2,
-  "scroll_delay_max": 5,
-  "max_tweets": 50,
-  "max_minutes": 5,
-  "oldest_tweet_date": null,
-  "output_dir": "feed_data"
+  "output_dir": "feed_data",
+  "platforms": {
+    "twitter": {
+      "enabled": true,
+      "scroll_delay_min": 2,
+      "scroll_delay_max": 5,
+      "max_posts": 50,
+      "max_minutes": 5,
+      "oldest_post_date": null,
+      "max_reply_tweets": 20,
+      "max_replies_per_tweet": 5,
+      "reply_batch_size": 4,
+      "session_file": "session/twitter_state.json"
+    },
+    "threads": {
+      "enabled": false,
+      "scroll_delay_min": 3,
+      "scroll_delay_max": 6,
+      "max_posts": 50,
+      "max_minutes": 5,
+      "session_file": "session/threads_state.json"
+    },
+    "instagram": {
+      "enabled": false,
+      "scroll_delay_min": 3,
+      "scroll_delay_max": 7,
+      "max_posts": 30,
+      "max_minutes": 5,
+      "session_file": "session/instagram_state.json"
+    }
+  }
 }

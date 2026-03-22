@@ -10,26 +10,42 @@
   header { position: sticky; top: 0; background: rgba(21,32,43,0.85); backdrop-filter: blur(12px); padding: 16px 20px; border-bottom: 1px solid #38444d; z-index: 10; }
   header h1 { font-size: 20px; font-weight: 700; }
   header .meta { font-size: 13px; color: #8899a6; margin-top: 4px; }
+  .platform-tabs { display: flex; gap: 0; border-bottom: 1px solid #38444d; }
+  .platform-tabs button { flex: 1; background: none; border: none; border-bottom: 2px solid transparent; color: #8899a6; padding: 12px 16px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+  .platform-tabs button:hover { color: #e7e9ea; background: rgba(255,255,255,0.03); }
+  .platform-tabs button.active { color: #1da1f2; border-bottom-color: #1da1f2; }
+  .platform-tabs button .badge { background: #38444d; color: #8899a6; padding: 1px 6px; border-radius: 10px; font-size: 11px; margin-left: 6px; }
   .sort-bar { display: flex; gap: 8px; padding: 12px 20px; border-bottom: 1px solid #38444d; flex-wrap: wrap; }
   .sort-bar button { background: none; border: 1px solid #38444d; color: #8899a6; padding: 6px 14px; border-radius: 20px; font-size: 13px; cursor: pointer; transition: all 0.15s; }
   .sort-bar button:hover { border-color: #1da1f2; color: #1da1f2; }
   .sort-bar button.active { background: #1da1f2; border-color: #1da1f2; color: #fff; }
-  .tweet { padding: 16px 20px; border-bottom: 1px solid #38444d; transition: background 0.15s; }
-  .tweet:hover { background: rgba(255,255,255,0.03); }
-  .tweet-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .post { padding: 16px 20px; border-bottom: 1px solid #38444d; transition: background 0.15s; }
+  .post:hover { background: rgba(255,255,255,0.03); }
+  .post-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
   .author { font-weight: 700; font-size: 15px; }
   .handle { color: #8899a6; font-size: 14px; margin-left: 6px; }
   .time { color: #8899a6; font-size: 13px; white-space: nowrap; }
-  .retweet-badge { font-size: 12px; color: #8899a6; margin-bottom: 6px; }
-  .tweet-text { font-size: 15px; line-height: 1.5; margin-bottom: 10px; word-wrap: break-word; }
-  .tweet-text a { color: #1da1f2; text-decoration: none; }
-  .tweet-text a:hover { text-decoration: underline; }
+  .platform-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-right: 8px; font-weight: 600; }
+  .platform-badge.twitter { background: rgba(29,161,242,0.15); color: #1da1f2; }
+  .platform-badge.threads { background: rgba(255,255,255,0.1); color: #e7e9ea; }
+  .platform-badge.instagram { background: rgba(225,48,108,0.15); color: #e1306c; }
+  .repost-badge { font-size: 12px; color: #8899a6; margin-bottom: 6px; }
+  .post-text { font-size: 15px; line-height: 1.5; margin-bottom: 10px; word-wrap: break-word; }
+  .post-text a { color: #1da1f2; text-decoration: none; }
+  .post-text a:hover { text-decoration: underline; }
   .media { border-radius: 12px; overflow: hidden; margin-bottom: 10px; }
   .media img { width: 100%; display: block; cursor: pointer; transition: opacity 0.15s; }
   .media img:hover { opacity: 0.9; }
   .media video { width: 100%; display: block; border-radius: 12px; }
   .stats { display: flex; gap: 24px; color: #8899a6; font-size: 13px; }
   .stats span { display: flex; align-items: center; gap: 4px; }
+  .replies-section { margin-top: 10px; padding-top: 10px; border-top: 1px solid #38444d; }
+  .reply { padding: 8px 0 8px 16px; border-left: 2px solid #38444d; margin-bottom: 6px; }
+  .reply .reply-header { font-size: 13px; margin-bottom: 2px; }
+  .reply .reply-header .author { font-size: 13px; }
+  .reply .reply-header .handle { font-size: 12px; }
+  .reply .reply-text { font-size: 14px; line-height: 1.4; color: #d9d9d9; }
+  .reply .reply-stats { font-size: 12px; color: #8899a6; margin-top: 3px; }
   .no-data { padding: 60px 20px; text-align: center; color: #8899a6; }
   .no-data h2 { margin-bottom: 12px; color: #e7e9ea; }
   .no-data code { background: #22303c; padding: 2px 8px; border-radius: 4px; font-size: 14px; }
@@ -42,10 +58,12 @@
   <div class="meta" id="meta"></div>
 </header>
 
+<div class="platform-tabs" id="platform-tabs"></div>
+
 <div class="sort-bar" id="sort-bar">
   <button data-sort="time" class="active">Latest</button>
   <button data-sort="likes">Most Liked</button>
-  <button data-sort="retweets">Most RT'd</button>
+  <button data-sort="reposts">Most Reposted</button>
   <button data-sort="replies">Most Replies</button>
 </div>
 
@@ -53,44 +71,70 @@
 
 <div class="no-data" id="no-data" style="display:none">
   <h2>No data loaded</h2>
-  <p>Drag and drop a <code>tweets.json</code> file here, or use the file picker below.</p>
+  <p>Drag and drop a <code>posts.json</code> or <code>tweets.json</code> file here, or use the file picker below.</p>
   <br>
   <input type="file" id="file-picker" accept=".json">
 </div>
 
 <script>
-let tweets = [];
+let allPosts = [];
 let currentSort = 'time';
+let currentPlatform = 'all';
+
+const PLATFORM_LINKS = {
+  twitter: { base: 'https://x.com', mention: (h) => `https://x.com/${h}`, hashtag: (h) => `https://x.com/hashtag/${h}` },
+  threads: { base: 'https://threads.net', mention: (h) => `https://threads.net/@${h}`, hashtag: (h) => `https://threads.net/search?q=%23${h}` },
+  instagram: { base: 'https://instagram.com', mention: (h) => `https://instagram.com/${h}`, hashtag: (h) => `https://instagram.com/explore/tags/${h}` },
+};
 
 async function init() {
-  // Fetch the feed_data directory listing to find the latest run
-  try {
-    const res = await fetch('feed_data/latest.json');
-    if (res.ok) {
-      const info = await res.json();
-      const dataRes = await fetch(`feed_data/${info.run_dir}/tweets.json`);
-      if (dataRes.ok) { loadData(await dataRes.json(), info.run_dir); return; }
-    }
-  } catch(e) {}
-
-  // Fallback: try index to find runs
+  // Scan feed_data/ directory for all runs
   try {
     const res = await fetch('feed_data/');
     if (res.ok) {
       const html = await res.text();
-      // Parse directory listing for run folders (YYYY-MM-DD_HHMMSS format)
-      const matches = [...html.matchAll(/href="(\d{4}-\d{2}-\d{2}_\d{6})\/"/g)];
+      // Match both new format (with platform suffix) and old formats
+      const matches = [...html.matchAll(/href="([^"]+?)\/"/g)]
+        .map(m => m[1])
+        .filter(d => /^\d{4}-\d{2}-\d{2}/.test(d));
+
       if (matches.length > 0) {
-        const latest = matches.map(m => m[1]).sort().pop();
-        const dataRes = await fetch(`feed_data/${latest}/tweets.json`);
-        if (dataRes.ok) { loadData(await dataRes.json(), latest); return; }
-      }
-      // Also try old date format (YYYY-MM-DD)
-      const dateMatches = [...html.matchAll(/href="(\d{4}-\d{2}-\d{2})\/"/g)];
-      if (dateMatches.length > 0) {
-        const latest = dateMatches.map(m => m[1]).sort().pop();
-        const dataRes = await fetch(`feed_data/${latest}/tweets.json`);
-        if (dataRes.ok) { loadData(await dataRes.json(), latest); return; }
+        // Sort by name (timestamp), take latest per platform
+        matches.sort();
+        const latestByPlatform = {};
+        for (const dir of matches) {
+          // Extract platform from dir name: YYYY-MM-DD_HHMMSS_twitter -> twitter
+          const parts = dir.split('_');
+          const platform = parts.length >= 3 ? parts.slice(2).join('_') : 'twitter';
+          latestByPlatform[platform] = dir;
+        }
+
+        // Load data from all latest runs
+        for (const [platform, dir] of Object.entries(latestByPlatform)) {
+          // Try posts.json first, then tweets.json
+          for (const filename of ['posts.json', 'tweets.json']) {
+            try {
+              const dataRes = await fetch(`feed_data/${dir}/${filename}`);
+              if (dataRes.ok) {
+                const data = await dataRes.json();
+                const posts = (data.posts || data.tweets || []).map(p => ({
+                  ...p,
+                  platform: p.platform || platform,
+                  // Normalize field names from old format
+                  reposts: p.reposts ?? p.retweets ?? 0,
+                  is_repost: p.is_repost ?? p.is_retweet ?? false,
+                }));
+                allPosts.push(...posts);
+                break;
+              }
+            } catch(e) {}
+          }
+        }
+
+        if (allPosts.length > 0) {
+          renderAll();
+          return;
+        }
       }
     }
   } catch(e) {}
@@ -99,30 +143,52 @@ async function init() {
   document.getElementById('sort-bar').style.display = 'none';
 }
 
-let currentRunDir = '';
-
-function loadData(data, runDir) {
-  currentRunDir = runDir || '';
+function renderAll() {
   document.getElementById('no-data').style.display = 'none';
   document.getElementById('sort-bar').style.display = 'flex';
-
-  tweets = data.tweets || [];
-  const meta = data.metadata || {};
-  const vidCount = tweets.reduce((n, t) => n + (t.video_urls || []).length, 0);
-  const imgCount = tweets.reduce((n, t) => n + (t.media_urls || []).length, 0);
-  document.getElementById('meta').textContent =
-    `${tweets.length} tweets | ${imgCount} images, ${vidCount} videos | ` +
-    `${new Date(meta.run_timestamp).toLocaleString()} | ${(meta.collection_duration_seconds || 0).toFixed(0)}s run`;
-  renderTweets();
+  renderPlatformTabs();
+  updateMeta();
+  renderPosts();
 }
 
-function formatText(text) {
+function renderPlatformTabs() {
+  const platforms = [...new Set(allPosts.map(p => p.platform))];
+  const counts = {};
+  for (const p of allPosts) counts[p.platform] = (counts[p.platform] || 0) + 1;
+
+  const tabs = document.getElementById('platform-tabs');
+  let html = `<button data-platform="all" class="active">All<span class="badge">${allPosts.length}</span></button>`;
+  for (const p of platforms) {
+    html += `<button data-platform="${p}">${p.charAt(0).toUpperCase() + p.slice(1)}<span class="badge">${counts[p]}</span></button>`;
+  }
+  tabs.innerHTML = html;
+
+  // Only show tabs if more than one platform
+  tabs.style.display = platforms.length > 1 ? 'flex' : 'none';
+}
+
+function getFilteredPosts() {
+  if (currentPlatform === 'all') return allPosts;
+  return allPosts.filter(p => p.platform === currentPlatform);
+}
+
+function updateMeta() {
+  const posts = getFilteredPosts();
+  const vidCount = posts.reduce((n, t) => n + (t.video_urls || []).length, 0);
+  const imgCount = posts.reduce((n, t) => n + (t.media_urls || []).length, 0);
+  const platforms = [...new Set(posts.map(p => p.platform))].join(', ');
+  document.getElementById('meta').textContent =
+    `${posts.length} posts | ${imgCount} images, ${vidCount} videos | ${platforms}`;
+}
+
+function formatText(text, platform) {
+  const links = PLATFORM_LINKS[platform] || PLATFORM_LINKS.twitter;
   return text
     .replace(/&amp;/g, '&')
     .replace(/(https?:\/\/t\.co\/\S+)/g, '')
     .replace(/(https?:\/\/\S+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
-    .replace(/@(\w+)/g, '<a href="https://x.com/$1" target="_blank" rel="noopener">@$1</a>')
-    .replace(/#(\w+)/g, '<a href="https://x.com/hashtag/$1" target="_blank" rel="noopener">#$1</a>')
+    .replace(/@(\w+)/g, (_, h) => `<a href="${links.mention(h)}" target="_blank" rel="noopener">@${h}</a>`)
+    .replace(/#(\w+)/g, (_, h) => `<a href="${links.hashtag(h)}" target="_blank" rel="noopener">#${h}</a>`)
     .trim();
 }
 
@@ -141,25 +207,30 @@ function fmtNum(n) {
   return n.toString();
 }
 
-function sortTweets(tweets, sort) {
-  const sorted = [...tweets];
+function sortPosts(posts, sort) {
+  const sorted = [...posts];
   switch(sort) {
     case 'likes': sorted.sort((a,b) => b.likes - a.likes); break;
-    case 'retweets': sorted.sort((a,b) => b.retweets - a.retweets); break;
+    case 'reposts': sorted.sort((a,b) => (b.reposts||0) - (a.reposts||0)); break;
     case 'replies': sorted.sort((a,b) => b.replies - a.replies); break;
     default: sorted.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
   }
   return sorted;
 }
 
-function renderTweets() {
-  const sorted = sortTweets(tweets, currentSort);
+function renderPosts() {
+  const posts = getFilteredPosts();
+  const sorted = sortPosts(posts, currentSort);
   const feed = document.getElementById('feed');
-  feed.innerHTML = sorted.map(t => {
-    const authorDisplay = t.author_name || t.author_handle || 'Unknown';
-    const handleDisplay = t.author_handle ? `<a href="https://x.com/${t.author_handle}" target="_blank" rel="noopener">@${t.author_handle}</a>` : '';
+  const links = PLATFORM_LINKS;
 
-    // Build media HTML from local_media_paths (relative to feed_data/)
+  feed.innerHTML = sorted.map(t => {
+    const platform = t.platform || 'twitter';
+    const plinks = links[platform] || links.twitter;
+    const authorDisplay = t.author_name || t.author_handle || 'Unknown';
+    const handleDisplay = t.author_handle ? `<a href="${plinks.mention(t.author_handle)}" target="_blank" rel="noopener">@${t.author_handle}</a>` : '';
+    const showPlatformBadge = currentPlatform === 'all' && allPosts.some(p => p.platform !== platform);
+
     let mediaHtml = '';
     for (const p of (t.local_media_paths || [])) {
       const fullPath = p.startsWith('feed_data/') ? p : `feed_data/${p}`;
@@ -170,24 +241,42 @@ function renderTweets() {
       }
     }
 
-    const rtBadge = t.is_retweet
-      ? `<div class="retweet-badge">RT${t.original_author ? ' by @' + t.original_author : ''}</div>`
+    const repostBadge = t.is_repost
+      ? `<div class="repost-badge">repost${t.original_author ? ' by @' + t.original_author : ''}</div>`
       : '';
 
-    return `<div class="tweet">
-      ${rtBadge}
-      <div class="tweet-header">
-        <div><span class="author">${authorDisplay}</span><span class="handle">${handleDisplay}</span></div>
-        <span class="time">${timeAgo(t.created_at)}</span>
+    const repostLabel = platform === 'twitter' ? 'RT' : 'reposts';
+
+    return `<div class="post">
+      ${repostBadge}
+      <div class="post-header">
+        <div>
+          ${showPlatformBadge ? `<span class="platform-badge ${platform}">${platform}</span>` : ''}
+          <span class="author">${authorDisplay}</span><span class="handle">${handleDisplay}</span>
+        </div>
+        <span class="time">${t.url ? `<a href="${t.url}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${timeAgo(t.created_at)}</a>` : timeAgo(t.created_at)}</span>
       </div>
-      <div class="tweet-text">${formatText(t.text)}</div>
+      <div class="post-text">${formatText(t.text, platform)}</div>
       ${mediaHtml}
       <div class="stats">
         <span>replies ${fmtNum(t.replies)}</span>
-        <span>RT ${fmtNum(t.retweets)}</span>
+        <span>${repostLabel} ${fmtNum(t.reposts || 0)}</span>
         <span>likes ${fmtNum(t.likes)}</span>
-        <span>quotes ${fmtNum(t.quotes || 0)}</span>
+        ${t.quotes ? `<span>quotes ${fmtNum(t.quotes)}</span>` : ''}
       </div>
+      ${(t.top_replies && t.top_replies.length > 0) ? `
+      <div class="replies-section">
+        ${t.top_replies.map(r => `
+          <div class="reply">
+            <div class="reply-header">
+              <span class="author">${r.author_name || r.author_handle || 'Unknown'}</span>
+              <span class="handle">${r.author_handle ? '<a href="' + plinks.mention(r.author_handle) + '" target="_blank" rel="noopener">@' + r.author_handle + '</a>' : ''}</span>
+            </div>
+            <div class="reply-text">${formatText(r.text, platform)}</div>
+            <div class="reply-stats">${fmtNum(r.likes)} likes</div>
+          </div>
+        `).join('')}
+      </div>` : ''}
     </div>`;
   }).join('');
 }
@@ -198,7 +287,18 @@ document.getElementById('sort-bar').addEventListener('click', e => {
   document.querySelectorAll('.sort-bar button').forEach(b => b.classList.remove('active'));
   e.target.classList.add('active');
   currentSort = e.target.dataset.sort;
-  renderTweets();
+  renderPosts();
+});
+
+// Platform tabs
+document.getElementById('platform-tabs').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  document.querySelectorAll('.platform-tabs button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentPlatform = btn.dataset.platform;
+  updateMeta();
+  renderPosts();
 });
 
 // Drag & drop
@@ -206,14 +306,40 @@ document.addEventListener('dragover', e => e.preventDefault());
 document.addEventListener('drop', e => {
   e.preventDefault();
   const file = e.dataTransfer.files[0];
-  if (file) { const r = new FileReader(); r.onload = () => loadData(JSON.parse(r.result)); r.readAsText(file); }
+  if (file) {
+    const r = new FileReader();
+    r.onload = () => {
+      const data = JSON.parse(r.result);
+      const posts = (data.posts || data.tweets || []).map(p => ({
+        ...p, platform: p.platform || 'twitter',
+        reposts: p.reposts ?? p.retweets ?? 0,
+        is_repost: p.is_repost ?? p.is_retweet ?? false,
+      }));
+      allPosts = posts;
+      renderAll();
+    };
+    r.readAsText(file);
+  }
 });
 
 // File picker
 document.addEventListener('change', e => {
   if (e.target.id !== 'file-picker') return;
   const file = e.target.files[0];
-  if (file) { const r = new FileReader(); r.onload = () => loadData(JSON.parse(r.result)); r.readAsText(file); }
+  if (file) {
+    const r = new FileReader();
+    r.onload = () => {
+      const data = JSON.parse(r.result);
+      const posts = (data.posts || data.tweets || []).map(p => ({
+        ...p, platform: p.platform || 'twitter',
+        reposts: p.reposts ?? p.retweets ?? 0,
+        is_repost: p.is_repost ?? p.is_retweet ?? false,
+      }));
+      allPosts = posts;
+      renderAll();
+    };
+    r.readAsText(file);
+  }
 });
 
 init();

@@ -1,4 +1,4 @@
-"""Session management — login, save/load cookies."""
+"""Session management — login, save/load cookies for Twitter."""
 
 import asyncio
 import json
@@ -32,39 +32,36 @@ async def login_and_save_session():
         print("[auth] Browser closed. You can now run the collector.")
 
 
-async def load_session(playwright):
+async def load_session(playwright, session_file: str | None = None):
     """Launch browser with saved session state. Returns (browser, context, page)."""
-    if not SESSION_FILE.exists():
+    session_path = Path(session_file) if session_file else SESSION_FILE
+
+    if not session_path.exists():
         raise FileNotFoundError(
-            f"No saved session at {SESSION_FILE}. "
-            "Run 'python3 src/auth.py' to log in first."
+            f"No saved session at {session_path}. "
+            "Run 'python3 -m src.platforms.twitter.auth' to log in first."
         )
 
-    # Validate session file is readable JSON
     try:
-        json.loads(SESSION_FILE.read_text())
+        json.loads(session_path.read_text())
     except (json.JSONDecodeError, OSError) as e:
         raise RuntimeError(
-            f"Session file at {SESSION_FILE} is corrupted: {e}. "
-            "Run 'python3 src/auth.py' to re-authenticate."
+            f"Session file at {session_path} is corrupted: {e}. "
+            "Run 'python3 -m src.platforms.twitter.auth' to re-authenticate."
         )
 
     browser = await playwright.chromium.launch(headless=False)
-    context = await browser.new_context(storage_state=str(SESSION_FILE))
+    context = await browser.new_context(storage_state=str(session_path))
     page = await context.new_page()
 
-    # Navigate to home feed — use domcontentloaded instead of networkidle
-    # because Twitter constantly streams data and networkidle may never fire
     await page.goto("https://twitter.com/home", wait_until="domcontentloaded")
-    # Give the page a moment to settle and redirect if session is invalid
     await page.wait_for_timeout(3000)
 
-    # Check if redirected to login page (session expired)
     if "/login" in page.url or "/i/flow/login" in page.url:
         await browser.close()
         raise RuntimeError(
             "Session expired or invalid. "
-            "Run 'python3 src/auth.py' to re-authenticate."
+            "Run 'python3 -m src.platforms.twitter.auth' to re-authenticate."
         )
 
     print(f"[auth] Session loaded successfully. Current URL: {page.url}")

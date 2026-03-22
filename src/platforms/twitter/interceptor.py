@@ -1,11 +1,11 @@
-"""GraphQL response interception and parsing."""
+"""GraphQL response interception and parsing for Twitter."""
 
 import json
 import re
 from datetime import datetime
 from pathlib import Path
 
-from src.models import Tweet
+from src.models import Post
 
 
 class ResponseInterceptor:
@@ -29,7 +29,6 @@ class ResponseInterceptor:
 
             self.responses.append(body)
 
-            # Save raw response for debugging
             raw_dir = self.run_dir / "raw"
             raw_dir.mkdir(parents=True, exist_ok=True)
 
@@ -37,7 +36,6 @@ class ResponseInterceptor:
             raw_path = raw_dir / f"{endpoint}_{timestamp}.json"
             raw_path.write_text(json.dumps(body, indent=2))
 
-            # Count tweet entries
             tweet_count = self._count_entries(body)
             size = len(json.dumps(body))
 
@@ -50,7 +48,6 @@ class ResponseInterceptor:
             print(f"[interceptor] Error processing response: {e}")
 
     def _count_entries(self, body: dict) -> int:
-        """Count tweet entries in a GraphQL response."""
         try:
             instructions = (
                 body.get("data", {})
@@ -66,39 +63,39 @@ class ResponseInterceptor:
         except (AttributeError, TypeError):
             return 0
 
-    def parse_all_tweets(self, skip_ads: bool = True) -> list[Tweet]:
-        """Parse all captured responses into Tweet objects.
-
-        Returns deduplicated list of tweets across all responses.
-        """
-        tweets_by_id: dict[str, Tweet] = {}
+    def parse_all_posts(self, skip_ads: bool = True) -> list[Post]:
+        """Parse all captured responses into Post objects."""
+        posts_by_id: dict[str, Post] = {}
         ads_skipped = 0
         dupes_within_run = 0
 
         for response_body in self.responses:
             entries = self._extract_entries(response_body)
             for entry in entries:
-                tweet = self._parse_entry(entry)
-                if tweet is None:
+                post = self._parse_entry(entry)
+                if post is None:
                     continue
-                if skip_ads and tweet.is_ad:
+                if skip_ads and post.is_ad:
                     ads_skipped += 1
                     continue
-                if tweet.id in tweets_by_id:
+                if post.id in posts_by_id:
                     dupes_within_run += 1
                 else:
-                    tweets_by_id[tweet.id] = tweet
+                    posts_by_id[post.id] = post
 
-        tweets = list(tweets_by_id.values())
+        posts = list(posts_by_id.values())
         print(
-            f"[parser] Parsed {len(tweets)} unique tweets "
+            f"[parser] Parsed {len(posts)} unique tweets "
             f"({dupes_within_run} within-run duplicates, "
             f"{ads_skipped} ads skipped) from {len(self.responses)} response(s)"
         )
-        return tweets
+        return posts
+
+    # Keep backward-compatible alias
+    def parse_all_tweets(self, skip_ads: bool = True) -> list[Post]:
+        return self.parse_all_posts(skip_ads=skip_ads)
 
     def _extract_entries(self, body: dict) -> list[dict]:
-        """Extract timeline entries from a GraphQL response body."""
         try:
             instructions = (
                 body.get("data", {})
@@ -113,21 +110,17 @@ class ResponseInterceptor:
         except (AttributeError, TypeError):
             return []
 
-    def _parse_entry(self, entry: dict) -> Tweet | None:
-        """Parse a single timeline entry into a Tweet, or None if not a tweet."""
+    def _parse_entry(self, entry: dict) -> Post | None:
         try:
             content = entry.get("content", {})
             item_content = content.get("itemContent", {})
 
-            # Only process tweet items (skip cursors, modules, etc.)
             item_type = item_content.get("itemType", "")
             if item_type != "TimelineTweet":
                 return None
 
-            # Check if promoted/ad
             is_ad = "promotedMetadata" in item_content
 
-            # Navigate to the tweet result
             tweet_result = item_content.get("tweet_results", {}).get("result", {})
             if not tweet_result:
                 return None
@@ -139,12 +132,8 @@ class ResponseInterceptor:
             print(f"[parser] Skipping entry {entry_id}: {e}")
             return None
 
-    def _parse_tweet_result(
-        self, result: dict, is_ad: bool = False
-    ) -> Tweet | None:
-        """Parse a tweet_results.result object into a Tweet."""
+    def _parse_tweet_result(self, result: dict, is_ad: bool = False) -> Post | None:
         try:
-            # Handle TweetWithVisibilityResults wrapper
             typename = result.get("__typename", "")
             if typename == "TweetWithVisibilityResults":
                 result = result.get("tweet", {})
@@ -158,38 +147,35 @@ class ResponseInterceptor:
             legacy = result.get("legacy", {})
             core = result.get("core", {})
 
-            # Extract author info
             author_handle, author_name = self._extract_author(core)
 
-            # Check for retweet
-            is_retweet = False
+            is_repost = False
             original_author = None
             rt_result = legacy.get("retweeted_status_result", {}).get("result", {})
             if rt_result:
-                is_retweet = True
-                # The outer tweet's author is the retweeter;
-                # parse the inner tweet for the actual content
+                is_repost = True
                 original_author = author_handle
                 inner = self._parse_tweet_result(rt_result)
                 if inner:
-                    return Tweet(
+                    return Post(
                         id=tweet_id,
+                        platform="twitter",
                         text=inner.text,
                         author_handle=inner.author_handle,
                         author_name=inner.author_name,
                         created_at=inner.created_at,
+                        url=f"https://x.com/{inner.author_handle}/status/{tweet_id}",
                         likes=inner.likes,
-                        retweets=inner.retweets,
+                        reposts=inner.reposts,
                         replies=inner.replies,
                         quotes=inner.quotes,
                         media_urls=inner.media_urls,
                         video_urls=inner.video_urls,
-                        is_retweet=True,
+                        is_repost=True,
                         original_author=original_author,
                         is_ad=is_ad,
                     )
 
-            # Extract engagement metrics
             text = legacy.get("full_text", "")
             created_at = legacy.get("created_at", "")
             likes = legacy.get("favorite_count", 0)
@@ -197,22 +183,23 @@ class ResponseInterceptor:
             replies_count = legacy.get("reply_count", 0)
             quotes_count = legacy.get("quote_count", 0)
 
-            # Extract media URLs from extended_entities (preferred) or entities
             media_urls, video_urls = self._extract_media_urls(legacy)
 
-            return Tweet(
+            return Post(
                 id=tweet_id,
+                platform="twitter",
                 text=text,
                 author_handle=author_handle,
                 author_name=author_name,
                 created_at=created_at,
+                url=f"https://x.com/{author_handle}/status/{tweet_id}",
                 likes=likes,
-                retweets=retweets_count,
+                reposts=retweets_count,
                 replies=replies_count,
                 quotes=quotes_count,
                 media_urls=media_urls,
                 video_urls=video_urls,
-                is_retweet=is_retweet,
+                is_repost=is_repost,
                 original_author=original_author,
                 is_ad=is_ad,
             )
@@ -222,14 +209,11 @@ class ResponseInterceptor:
             return None
 
     def _extract_author(self, core: dict) -> tuple[str, str]:
-        """Extract (screen_name, display_name) from the core.user_results path."""
         try:
             user_result = core.get("user_results", {}).get("result", {})
-            # Twitter moved screen_name/name to user_results.result.core
             user_core = user_result.get("core", {})
             screen_name = user_core.get("screen_name", "")
             name = user_core.get("name", "")
-            # Fallback to legacy path
             if not screen_name:
                 user_legacy = user_result.get("legacy", {})
                 screen_name = user_legacy.get("screen_name", "")
@@ -239,11 +223,6 @@ class ResponseInterceptor:
             return ("", "")
 
     def _extract_media_urls(self, legacy: dict) -> tuple[list[str], list[str]]:
-        """Extract image and video URLs from tweet legacy data.
-
-        Prefers extended_entities over entities for full media list.
-        Returns (image_urls, video_urls).
-        """
         image_urls = []
         video_urls = []
         media_source = legacy.get("extended_entities", legacy.get("entities", {}))
@@ -252,12 +231,8 @@ class ResponseInterceptor:
         for item in media_items:
             media_type = item.get("type", "")
             if media_type in ("video", "animated_gif"):
-                # Pick highest bitrate mp4 variant
                 variants = item.get("video_info", {}).get("variants", [])
-                mp4s = [
-                    v for v in variants
-                    if v.get("content_type") == "video/mp4"
-                ]
+                mp4s = [v for v in variants if v.get("content_type") == "video/mp4"]
                 if mp4s:
                     best = max(mp4s, key=lambda v: v.get("bitrate", 0))
                     video_urls.append(best["url"])

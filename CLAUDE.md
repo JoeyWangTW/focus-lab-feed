@@ -43,14 +43,22 @@ Automated agent that scrolls social media feeds FOR the user, collecting all con
 ```
 focus-lab-feed-collector/
   src/
-    collector.py          # Main entry point — orchestrates collection run
-    auth.py               # Session management — login, save/load cookies
-    interceptor.py        # GraphQL response interception and parsing
-    scroller.py           # Scroll automation — timing, depth, stop conditions
+    collect.py            # Unified CLI entry point (--platform twitter/threads/instagram)
+    models.py             # Unified Post data model (all platforms)
+    storage.py            # Data persistence — JSON output, per-run storage
     media_downloader.py   # Image/video download from media URLs
-    storage.py            # Data persistence — JSON output, deduplication
-    models.py             # Data classes for Tweet, Author, Media, etc.
-  config.json             # Runtime configuration
+    platforms/
+      base.py             # Abstract base classes for platform collectors
+      twitter/
+        auth.py           # Twitter session management
+        interceptor.py    # Twitter GraphQL response interception
+        scroller.py       # Twitter scroll automation
+        collector.py      # Twitter collection orchestration
+        replies.py        # Twitter reply capture (parallel tabs)
+      threads/            # (planned) Threads collector
+      instagram/          # (planned) Instagram collector
+  config.json             # Multi-platform runtime configuration
+  viewer.html             # Multi-platform feed viewer
   session/                # Browser session state (gitignored)
   feed_data/              # Collected data output (gitignored)
   tests/                  # Test files
