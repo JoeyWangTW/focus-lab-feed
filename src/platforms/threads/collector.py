@@ -11,9 +11,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
 from playwright.async_api import async_playwright
 
+from dataclasses import asdict
+
 from src.media_downloader import download_media
 from src.platforms.threads.auth import load_session
 from src.platforms.threads.interceptor import ResponseInterceptor
+from src.platforms.threads.replies import fetch_replies
 from src.storage import deduplicate_within_run, get_run_dir, save_posts, save_run_summary, set_run_dir
 
 
@@ -136,11 +139,34 @@ async def run(config: dict) -> dict:
             if dl_failed > 0:
                 warnings.append(f"{dl_failed} media download(s) failed")
 
+            # Fetch replies for top posts by reply count
+            reply_posts = [p for p in unique_posts if p.replies > 0 and p.url]
+            reply_posts.sort(key=lambda p: p.replies, reverse=True)
+            max_reply_posts = platform_config.get("max_reply_posts", 10)
+            reply_posts = reply_posts[:max_reply_posts]
+
+            if reply_posts:
+                post_dicts = [{"id": p.id, "url": p.url, "author_handle": p.author_handle} for p in reply_posts]
+                replies_map = await fetch_replies(
+                    context,
+                    post_dicts,
+                    max_replies_per_post=platform_config.get("max_replies_per_post", 5),
+                    batch_size=platform_config.get("reply_batch_size", 3),
+                )
+                post_by_id = {p.id: p for p in unique_posts}
+                for pid, reply_list in replies_map.items():
+                    if pid in post_by_id and reply_list:
+                        post_by_id[pid].top_replies = [asdict(r) for r in reply_list]
+                replies_fetched = sum(len(r) for r in replies_map.values())
+            else:
+                replies_fetched = 0
+
             save_posts(unique_posts, run_dir, platform="threads", duration_seconds=duration)
         else:
             unique_posts = []
             downloaded = 0
             dl_failed = 0
+            replies_fetched = 0
             warnings.append("No posts parsed from intercepted responses")
 
         duration = time.monotonic() - start_time
@@ -153,6 +179,7 @@ async def run(config: dict) -> dict:
             "unique_posts": len(unique_posts),
             "media_downloaded": downloaded,
             "media_failed": dl_failed,
+            "replies_fetched": replies_fetched,
             "scroll_count": scroll_count,
             "run_time_seconds": round(duration, 2),
             "stop_reason": stop_reason,
