@@ -29,6 +29,9 @@ async def run_platform(platform: str, config: dict):
     elif platform == "instagram":
         from src.platforms.instagram.collector import run
         return await run(config)
+    elif platform == "youtube":
+        from src.platforms.youtube.collector import run
+        return await run(config)
     else:
         print(f"[collect] Unknown platform: {platform}")
         return None
@@ -38,7 +41,7 @@ async def main():
     parser = argparse.ArgumentParser(description="Feed Collector")
     parser.add_argument(
         "--platform", "-p",
-        choices=["twitter", "threads", "instagram"],
+        choices=["twitter", "threads", "instagram", "youtube"],
         help="Run a specific platform (default: all enabled)",
     )
     args = parser.parse_args()

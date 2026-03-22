@@ -29,6 +29,12 @@
   .platform-badge.twitter { background: rgba(29,161,242,0.15); color: #1da1f2; }
   .platform-badge.threads { background: rgba(255,255,255,0.1); color: #e7e9ea; }
   .platform-badge.instagram { background: rgba(225,48,108,0.15); color: #e1306c; }
+  .platform-badge.youtube { background: rgba(255,0,0,0.15); color: #ff4444; }
+  .yt-embed { border-radius: 12px; overflow: hidden; margin-bottom: 10px; position: relative; padding-bottom: 56.25%; height: 0; }
+  .yt-embed iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; border-radius: 12px; }
+  .yt-meta { font-size: 13px; color: #8899a6; margin-bottom: 8px; }
+  .yt-meta span { margin-right: 12px; }
+  .short-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: rgba(255,0,0,0.15); color: #ff4444; font-weight: 600; margin-left: 6px; }
   .repost-badge { font-size: 12px; color: #8899a6; margin-bottom: 6px; }
   .post-text { font-size: 15px; line-height: 1.5; margin-bottom: 10px; word-wrap: break-word; }
   .post-text a { color: #1da1f2; text-decoration: none; }
@@ -90,6 +96,7 @@ const PLATFORM_LINKS = {
   twitter: { base: 'https://x.com', mention: (h) => `https://x.com/${h}`, hashtag: (h) => `https://x.com/hashtag/${h}` },
   threads: { base: 'https://threads.net', mention: (h) => `https://threads.net/@${h}`, hashtag: (h) => `https://threads.net/search?q=%23${h}` },
   instagram: { base: 'https://instagram.com', mention: (h) => `https://instagram.com/${h}`, hashtag: (h) => `https://instagram.com/explore/tags/${h}` },
+  youtube: { base: 'https://youtube.com', mention: (h) => `https://youtube.com/@${h}`, hashtag: (h) => `https://youtube.com/results?search_query=%23${h}` },
 };
 
 async function init() {
@@ -237,12 +244,20 @@ function renderPosts() {
     const showPlatformBadge = currentPlatform === 'all' && allPosts.some(p => p.platform !== platform);
 
     let mediaHtml = '';
-    for (const p of (t.local_media_paths || [])) {
-      const fullPath = p.startsWith('feed_data/') ? p : `feed_data/${p}`;
-      if (p.endsWith('.mp4')) {
-        mediaHtml += `<div class="media"><video src="${fullPath}" controls preload="metadata"></video></div>`;
-      } else {
-        mediaHtml += `<div class="media"><img src="${fullPath}" loading="lazy" onclick="window.open(this.src,'_blank')"></div>`;
+    const pd = t.platform_data || {};
+    if (platform === 'youtube' && pd.embed_url) {
+      mediaHtml = `<div class="yt-embed"><iframe src="${pd.embed_url}" allowfullscreen loading="lazy"></iframe></div>`;
+      if (pd.views || pd.duration) {
+        mediaHtml += `<div class="yt-meta">${pd.views ? `<span>${pd.views}</span>` : ''}${pd.duration ? `<span>${pd.duration}</span>` : ''}</div>`;
+      }
+    } else {
+      for (const p of (t.local_media_paths || [])) {
+        const fullPath = p.startsWith('feed_data/') ? p : `feed_data/${p}`;
+        if (p.endsWith('.mp4')) {
+          mediaHtml += `<div class="media"><video src="${fullPath}" controls preload="metadata"></video></div>`;
+        } else {
+          mediaHtml += `<div class="media"><img src="${fullPath}" loading="lazy" onclick="window.open(this.src,'_blank')"></div>`;
+        }
       }
     }
 
@@ -260,7 +275,7 @@ function renderPosts() {
         <div>
           ${adBadge}
           ${showPlatformBadge ? `<span class="platform-badge ${platform}">${platform}</span>` : ''}
-          <span class="author">${authorDisplay}</span><span class="handle">${handleDisplay}</span>
+          <span class="author">${authorDisplay}</span><span class="handle">${handleDisplay}</span>${pd.type === 'short' ? '<span class="short-badge">Short</span>' : ''}
         </div>
         <span class="time">${t.url ? `<a href="${t.url}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${timeAgo(t.created_at)}</a>` : timeAgo(t.created_at)}</span>
       </div>
