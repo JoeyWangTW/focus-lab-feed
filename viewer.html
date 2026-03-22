@@ -39,13 +39,18 @@
   .media video { width: 100%; display: block; border-radius: 12px; }
   .stats { display: flex; gap: 24px; color: #8899a6; font-size: 13px; }
   .stats span { display: flex; align-items: center; gap: 4px; }
-  .replies-section { margin-top: 10px; padding-top: 10px; border-top: 1px solid #38444d; }
+  .replies-toggle { margin-top: 8px; background: none; border: none; color: #1da1f2; font-size: 13px; cursor: pointer; padding: 4px 0; }
+  .replies-toggle:hover { text-decoration: underline; }
+  .replies-section { margin-top: 8px; padding-top: 8px; border-top: 1px solid #38444d; display: none; }
+  .replies-section.open { display: block; }
   .reply { padding: 8px 0 8px 16px; border-left: 2px solid #38444d; margin-bottom: 6px; }
   .reply .reply-header { font-size: 13px; margin-bottom: 2px; }
   .reply .reply-header .author { font-size: 13px; }
   .reply .reply-header .handle { font-size: 12px; }
   .reply .reply-text { font-size: 14px; line-height: 1.4; color: #d9d9d9; }
   .reply .reply-stats { font-size: 12px; color: #8899a6; margin-top: 3px; }
+  .ad-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: rgba(255,193,7,0.15); color: #ffc107; font-weight: 600; margin-right: 8px; }
+  .has-replies-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #1da1f2; margin-left: 4px; vertical-align: middle; }
   .no-data { padding: 60px 20px; text-align: center; color: #8899a6; }
   .no-data h2 { margin-bottom: 12px; color: #e7e9ea; }
   .no-data code { background: #22303c; padding: 2px 8px; border-radius: 4px; font-size: 14px; }
@@ -246,11 +251,14 @@ function renderPosts() {
       : '';
 
     const repostLabel = platform === 'twitter' ? 'RT' : 'reposts';
+    const adBadge = t.is_ad ? '<span class="ad-badge">Ad</span>' : '';
+    const hasCollectedReplies = t.top_replies && t.top_replies.length > 0;
 
-    return `<div class="post">
+    return `<div class="post" ${t.is_ad ? 'style="opacity:0.7"' : ''}>
       ${repostBadge}
       <div class="post-header">
         <div>
+          ${adBadge}
           ${showPlatformBadge ? `<span class="platform-badge ${platform}">${platform}</span>` : ''}
           <span class="author">${authorDisplay}</span><span class="handle">${handleDisplay}</span>
         </div>
@@ -259,12 +267,13 @@ function renderPosts() {
       <div class="post-text">${formatText(t.text, platform)}</div>
       ${mediaHtml}
       <div class="stats">
-        <span>replies ${fmtNum(t.replies)}</span>
+        <span>replies ${fmtNum(t.replies)}${hasCollectedReplies ? '<span class="has-replies-dot" title="Replies collected"></span>' : ''}</span>
         <span>${repostLabel} ${fmtNum(t.reposts || 0)}</span>
         <span>likes ${fmtNum(t.likes)}</span>
         ${t.quotes ? `<span>quotes ${fmtNum(t.quotes)}</span>` : ''}
       </div>
-      ${(t.top_replies && t.top_replies.length > 0) ? `
+      ${hasCollectedReplies ? `
+      <button class="replies-toggle" onclick="this.nextElementSibling.classList.toggle('open'); this.textContent = this.nextElementSibling.classList.contains('open') ? 'Hide replies' : 'Show ${t.top_replies.length} replies'">Show ${t.top_replies.length} replies</button>
       <div class="replies-section">
         ${t.top_replies.map(r => `
           <div class="reply">

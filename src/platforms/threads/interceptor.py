@@ -109,6 +109,9 @@ class ResponseInterceptor:
             else:
                 self._extract_media(post_data, image_urls, video_urls)
 
+            # Ad detection
+            is_ad = bool(post_data.get("is_paid_partnership"))
+
             return Post(
                 id=post_id,
                 platform="threads",
@@ -123,7 +126,7 @@ class ResponseInterceptor:
                 quotes=quote_count,
                 media_urls=image_urls,
                 video_urls=video_urls,
-                is_ad=False,
+                is_ad=is_ad,
             )
 
         except Exception as e:

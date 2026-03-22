@@ -147,9 +147,15 @@ class ResponseInterceptor:
             if not code:
                 return None
 
-            owner = media.get("owner", {}) or {}
-            username = owner.get("username", "")
-            full_name = owner.get("full_name", username)
+            # User info is in media.user (not media.owner)
+            user = media.get("user", {}) or {}
+            username = user.get("username", "")
+            full_name = user.get("full_name", username)
+            # Fallback to owner if user is empty
+            if not username:
+                owner = media.get("owner", {}) or {}
+                username = owner.get("username", "")
+                full_name = owner.get("full_name", username)
 
             caption_data = media.get("caption", {})
             text = caption_data.get("text", "") if caption_data else ""
@@ -173,8 +179,13 @@ class ResponseInterceptor:
             else:
                 self._extract_media(media, image_urls, video_urls)
 
-            # Check for ad
-            is_ad = bool(media.get("ad_id") or media.get("is_paid_partnership"))
+            # Check for ad — multiple signals
+            is_ad = bool(
+                node.get("ad")
+                or media.get("ad_id")
+                or media.get("dr_ad_type")
+                or media.get("is_paid_partnership")
+            )
 
             return Post(
                 id=post_id,
