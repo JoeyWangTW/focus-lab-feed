@@ -131,6 +131,63 @@
 - All 65 tests pass (12 parser + 9 dedup + 20 scroller + 12 storage + 12 media)
 - Files changed: src/media_downloader.py, src/collector.py, tests/test_media_downloader.py, docs/status.md, docs/worklog.md
 
+## 2026-03-22 - Multi-platform collection + viewer
+
+### Twitter improvements
+- Fixed author extraction: Twitter moved `screen_name`/`name` from `user_results.result.legacy` to `user_results.result.core` — need to check both paths with fallback
+- Added video download: `extended_entities.media[].video_info.variants[]` has mp4 URLs at different bitrates, pick highest
+- Changed scrolling from `scrollBy(0, innerHeight)` to `scrollTo(0, document.body.scrollHeight)` — the old approach only moved one viewport and stalled after 3 scrolls, the new one reaches the actual bottom and triggers infinite scroll loading
+- Changed storage from per-day to per-run: each collection gets `feed_data/YYYY-MM-DD_HHMMSS_{platform}/` since social media feeds serve unique content each time
+- Added reply collection via parallel browser tabs: open 4 tabs at once, each navigates to tweet detail URL, intercepts `TweetDetail` GraphQL response
+
+### Multi-platform architecture
+- Restructured to `src/platforms/{platform}/` with shared `models.py`, `storage.py`, `media_downloader.py`
+- Unified `Post` model replaces `Tweet` — added `platform`, `url`, `reposts`, `is_repost`, `platform_data` fields
+- Unified CLI: `python3 src/collect.py --platform twitter` or omit for all enabled
+- Config: nested per-platform settings under `platforms` key with `enabled` flags
+
+### Threads collector
+- **API pattern:** `threads.com/graphql/query` — responses contain `data.feedData.edges[].node.text_post_app_thread.thread_items[].post`
+- **Data location:** Feed data comes from GraphQL responses during page load and scroll (not embedded in HTML like Instagram)
+- **Key fields:** `post.user.username`, `post.caption.text`, `post.like_count`, `post.text_post_app_info.{direct_reply_count, repost_count, quote_count}`
+- **Media:** `post.image_versions2.candidates[]` for images, `post.video_versions[]` for video, `post.carousel_media[]` for multi-image
+- **Timestamps:** Unix epoch in `post.taken_at`
+- **Gotcha:** Some edges have `text_post_app_thread: null` (suggested users) — must null-check
+- **Replies:** Threads doesn't expose reply data in GraphQL or HTML script tags. Had to use DOM scraping: find `<a role="link" href="/@username">` elements, walk up the DOM tree to find associated text spans. Skip the OP and logged-in user's profile link.
+- **Media download:** Meta CDN URLs don't support Twitter's `?format=jpg&name=large` suffix — returns 403. Must use URLs directly.
+
+### Instagram collector
+- **API pattern:** `instagram.com/graphql/query` with key `xdt_api__v1__feed__timeline__connection`
+- **Data location:** Initial feed NOT in GraphQL (returns empty media fields). Feed data comes from:
+  1. Embedded JSON in `<script type="application/json">` tags on first load (path: `require[0][3][0].__bbox.require[0][3][1].__bbox.result.data.xdt_api__v1__feed__timeline__connection`)
+  2. GraphQL responses after scrolling (same connection key, but media is in `explore_story.media` not `media` directly)
+- **Key fields:** `media.user.username` (NOT `media.owner.username` — owner only has ID), `media.caption.text`, `media.like_count`, `media.comment_count`
+- **Media:** Same structure as Threads (`image_versions2.candidates[]`, `video_versions[]`, `carousel_media[]`)
+- **Ad detection:** Check `node.ad`, `media.ad_id`, `media.dr_ad_type`, `media.is_paid_partnership`
+- **Comments:** Found in post detail page HTML script tags as `XDTCommentDict` objects under `xdt_api__v1__media__media_id__comments__connection.edges[].node`. Fields: `user.username`, `text`, `comment_like_count`, `created_at`
+- **Gotcha:** Instagram aggressively detects bots. Need headful mode, realistic delays (3-7s between scrolls)
+
+### YouTube collector
+- **API pattern:** No GraphQL — YouTube uses `youtubei/v1/browse` and `youtubei/v1/guide`
+- **Data location:** `window.ytInitialData` JavaScript variable contains the entire home feed
+- **Feed structure:** `ytInitialData.contents.twoColumnBrowseResultsRenderer.tabs[0].tabRenderer.content.richGridRenderer.contents[]`
+- **Video items:** `richItemRenderer.content.lockupViewModel` — fields: `contentId` (video ID), `metadata.lockupMetadataViewModel.title.content`, channel name and views in `metadataRows`
+- **Shorts:** Appear in `richSectionRenderer.content.richShelfRenderer` shelves titled "Shorts". Each short is a `shortsLockupViewModel` with video ID in `onTap.innertubeCommand.reelWatchEndpoint.videoId`
+- **No media download:** Store `embed_url` (`youtube.com/embed/{videoId}`) for iframe playback in viewer
+- **Scrolling:** YouTube pre-loads heavily — initial page has ~20 videos + ~18 shorts. Scroll continuation via browse API didn't trigger in testing; the initial data is sufficient
+- **Gotcha:** YouTube recently changed from `videoRenderer` to `lockupViewModel` for video items
+
+### Viewer
+- Platform tabs (All | Twitter | Threads | Instagram | YouTube)
+- Multi-image: horizontal scrollable carousel with drag-to-scroll, counter badges, same-height items
+- Click image → fullscreen lightbox overlay
+- Videos autoplay muted on scroll (IntersectionObserver at 50% threshold), pause when scrolled away
+- YouTube embedded via iframe
+- Collapsible replies with blue dot indicator
+- Ad badge + dimmed styling
+- Platform-aware links (@mentions, #hashtags link to correct platform)
+- Backward compatible with old `tweets.json` format
+
 ## 2026-02-22 - S2.5 Collection Run Summary complete
 
 - Added `save_run_summary()` to `src/storage.py` — appends summary dicts to `run_log.json` array
