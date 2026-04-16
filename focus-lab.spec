@@ -16,6 +16,7 @@ a = Analysis(
         ('src', 'src'),
         ('skills', 'skills'),
         ('viewer', 'viewer'),
+        ('assets/focuslab-logo.svg', 'assets'),
     ],
     hiddenimports=[
         # FastAPI + Starlette
@@ -151,7 +152,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='Focus Lab Feed Collector.app',
-    icon=None,  # TODO: add app icon (.icns)
+    icon='assets/focuslab.icns',
     bundle_identifier='com.focuslab.feedcollector',
     info_plist={
         'NSPrincipalClass': 'NSApplication',

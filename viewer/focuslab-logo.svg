@@ -1,0 +1,35 @@
+<svg width="400" height="400" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+    <!-- Organic brainwave contours - topographic style -->
+    
+    <!-- Outer organic ring - MAXIMUM WOBBLE -->
+    <path d="M 190 25
+             C 235 15, 295 50, 335 85
+             C 375 115, 385 160, 380 200
+             C 375 255, 355 300, 315 330
+             C 275 360, 225 390, 175 385
+             C 125 380, 75 360, 55 315
+             C 35 270, 25 215, 45 175
+             C 65 135, 95 90, 135 65
+             C 165 45, 175 30, 190 25 Z" 
+          fill="none" stroke="#000" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <!-- Middle organic ring - High Irregularity -->
+    <path d="M 175 90
+             C 215 75, 275 110, 305 140
+             C 335 170, 350 215, 335 255
+             C 320 295, 280 335, 240 345
+             C 200 355, 150 340, 115 315
+             C 80 290, 65 245, 75 200
+             C 85 155, 115 120, 145 105
+             C 160 95, 165 92, 175 90 Z" 
+          fill="none" stroke="#000" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <!-- Inner organic blob - Distorted -->
+    <path d="M 185 160
+             C 220 145, 260 175, 275 205
+             C 290 235, 280 280, 250 300
+             C 220 320, 175 315, 145 295
+             C 115 275, 110 235, 125 200
+             C 140 165, 165 165, 185 160 Z" 
+          fill="none" stroke="#000" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
