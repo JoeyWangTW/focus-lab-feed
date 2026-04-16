@@ -50,7 +50,8 @@ async def run(config: dict) -> dict:
     output_dir = config.get("output_dir", "feed_data")
     platform_config = config.get("platforms", {}).get("instagram", config)
 
-    run_dir = get_run_dir(output_dir, platform="instagram")
+    job_id = config.get("_job_id")
+    run_dir = get_run_dir(output_dir, platform="instagram", job_id=job_id)
     set_run_dir(run_dir)
     print(f"[instagram] Run directory: {run_dir}")
 

@@ -1,5 +1,21 @@
 # Work Log
 
+## 2026-03-23 - Desktop app with macOS .app bundle
+
+- Built full desktop app in `app/` directory (FastAPI + vanilla JS SPA + PyWebView)
+- Backend: FastAPI server with REST API for auth, collection, config, data, export, setup
+- Frontend: 4-page SPA — Platforms (connect/disconnect), Collect (trigger/monitor), Viewer (feed display), Export (JSON/CSV/Focus Lab)
+- Auth flow: Playwright browser opens for manual login, asyncio.Event replaces stdin input(), browser disconnect detection, login verification (navigate to login page → check redirect)
+- Collection: background asyncio tasks wrapping existing platform `run()` functions, status polling, cancellation
+- Centralized paths (`app/paths.py`): dev mode uses project root, bundled mode uses `~/Library/Application Support/` and `~/Library/Caches/`
+- First-launch onboarding: detects missing Chromium, shows setup UI, installs via Playwright's node CLI driver
+- PyInstaller bundling: `focus-lab.spec` with hidden imports, macOS BUNDLE config, `scripts/build-macos.sh` for .app + .dmg
+- Result: 64MB .dmg, ~159MB .app, Chromium downloaded on first launch (~150MB one-time)
+- Fixed auth issues: stuck tasks on browser close, cancel not killing Playwright, can't reconnect after failure
+- Fixed login validation: flipped check (go to login page, verify redirect away) works for IG/Threads which don't require login to browse
+- Files created: app/{__init__,main,server,paths,setup}.py, app/api/{__init__,auth,collection,config,data,export,setup}.py, app/tasks/{__init__,manager,auth_task}.py, app/static/{index.html,css/app.css,js/{app,platforms,collection,viewer,export}.js}, focus-lab.spec, scripts/build-macos.sh, requirements-app.txt
+- Existing CLI (`python3 src/collect.py`) unchanged and still works independently
+
 ## 2026-02-22 - Project created
 
 - Initial project setup with TST structure

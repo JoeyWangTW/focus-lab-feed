@@ -51,7 +51,8 @@ async def run(config: dict) -> dict:
     output_dir = config.get("output_dir", "feed_data")
     platform_config = config.get("platforms", {}).get("threads", config)
 
-    run_dir = get_run_dir(output_dir, platform="threads")
+    job_id = config.get("_job_id")
+    run_dir = get_run_dir(output_dir, platform="threads", job_id=job_id)
     set_run_dir(run_dir)
     print(f"[threads] Run directory: {run_dir}")
 

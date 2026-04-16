@@ -22,6 +22,7 @@ class Post:
     local_media_paths: list[str] = field(default_factory=list)
     is_repost: bool = False
     original_author: Optional[str] = None
+    quoted_post: Optional[dict] = None  # Embedded original/quoted post content
     is_ad: bool = False
     top_replies: list[dict] = field(default_factory=list)
     platform_data: dict = field(default_factory=dict)

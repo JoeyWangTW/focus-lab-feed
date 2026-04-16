@@ -75,7 +75,8 @@ async def download_media(
 
             success = await download_file(session, download_url, dest)
             if success:
-                rel_path = str(dest.relative_to(run_dir.parent))
+                # Relative to feed_data/ root for serving via /feed_data/ mount
+                rel_path = str(dest.relative_to(Path(output_dir)))
                 post.local_media_paths.append(rel_path)
                 downloaded += 1
             else:

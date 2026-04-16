@@ -151,9 +151,13 @@ class ResponseInterceptor:
 
             is_repost = False
             original_author = None
+            quoted_post = None
+
+            # Retweet: show original content, note who retweeted
             rt_result = legacy.get("retweeted_status_result", {}).get("result", {})
             if rt_result:
                 is_repost = True
+                # original_author = the person who retweeted (the feed owner's timeline shows their RT)
                 original_author = author_handle
                 inner = self._parse_tweet_result(rt_result)
                 if inner:
@@ -164,7 +168,7 @@ class ResponseInterceptor:
                         author_handle=inner.author_handle,
                         author_name=inner.author_name,
                         created_at=inner.created_at,
-                        url=f"https://x.com/{inner.author_handle}/status/{tweet_id}",
+                        url=f"https://x.com/{inner.author_handle}/status/{inner.id}",
                         likes=inner.likes,
                         reposts=inner.reposts,
                         replies=inner.replies,
@@ -173,10 +177,13 @@ class ResponseInterceptor:
                         video_urls=inner.video_urls,
                         is_repost=True,
                         original_author=original_author,
+                        quoted_post=inner.quoted_post,
                         is_ad=is_ad,
                     )
 
-            text = legacy.get("full_text", "")
+            # Prefer note_tweet for long-form posts (>280 chars)
+            note_tweet = result.get("note_tweet", {}).get("note_tweet_results", {}).get("result", {})
+            text = note_tweet.get("text") or legacy.get("full_text", "")
             created_at = legacy.get("created_at", "")
             likes = legacy.get("favorite_count", 0)
             retweets_count = legacy.get("retweet_count", 0)
@@ -184,6 +191,25 @@ class ResponseInterceptor:
             quotes_count = legacy.get("quote_count", 0)
 
             media_urls, video_urls = self._extract_media_urls(legacy)
+
+            # Quote tweet: capture the quoted post content
+            if legacy.get("is_quote_status"):
+                qt_result = result.get("quoted_status_result", {}).get("result", {})
+                if qt_result:
+                    qt_post = self._parse_tweet_result(qt_result)
+                    if qt_post:
+                        from dataclasses import asdict
+                        quoted_post = {
+                            "id": qt_post.id,
+                            "text": qt_post.text,
+                            "author_handle": qt_post.author_handle,
+                            "author_name": qt_post.author_name,
+                            "created_at": qt_post.created_at,
+                            "url": qt_post.url,
+                            "likes": qt_post.likes,
+                            "media_urls": qt_post.media_urls,
+                            "video_urls": qt_post.video_urls,
+                        }
 
             return Post(
                 id=tweet_id,
@@ -201,6 +227,7 @@ class ResponseInterceptor:
                 video_urls=video_urls,
                 is_repost=is_repost,
                 original_author=original_author,
+                quoted_post=quoted_post,
                 is_ad=is_ad,
             )
 

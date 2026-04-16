@@ -47,7 +47,8 @@ async def run(config: dict) -> dict:
     platform_config = config.get("platforms", {}).get("twitter", config)
 
     # Create a unique run directory
-    run_dir = get_run_dir(output_dir, platform="twitter")
+    job_id = config.get("_job_id")
+    run_dir = get_run_dir(output_dir, platform="twitter", job_id=job_id)
     set_run_dir(run_dir)
     print(f"[twitter] Run directory: {run_dir}")
 

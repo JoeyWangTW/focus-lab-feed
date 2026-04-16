@@ -112,6 +112,43 @@ class ResponseInterceptor:
             # Ad detection
             is_ad = bool(post_data.get("is_paid_partnership"))
 
+            # Repost detection — Threads provides share_info.reposted_post
+            is_repost = False
+            original_author = None
+            quoted_post = None
+            share_info = tp_info.get("share_info", {})
+            reposted = share_info.get("reposted_post")
+            if reposted:
+                is_repost = True
+                # This post is a repost — current user/text is the reposter
+                original_author = username
+                # Parse the original post content
+                orig_user = reposted.get("user", {})
+                orig_caption = reposted.get("caption", {})
+                orig_code = reposted.get("code", "")
+                orig_username = orig_user.get("username", "")
+
+                orig_image_urls = []
+                orig_video_urls = []
+                orig_carousel = reposted.get("carousel_media", [])
+                if orig_carousel:
+                    for cm in orig_carousel:
+                        self._extract_media(cm, orig_image_urls, orig_video_urls)
+                else:
+                    self._extract_media(reposted, orig_image_urls, orig_video_urls)
+
+                quoted_post = {
+                    "id": str(reposted.get("pk", "")),
+                    "text": orig_caption.get("text", "") if orig_caption else "",
+                    "author_handle": orig_username,
+                    "author_name": orig_user.get("full_name", orig_username),
+                    "created_at": datetime.fromtimestamp(reposted.get("taken_at", 0)).isoformat() if reposted.get("taken_at") else "",
+                    "url": f"https://www.threads.net/@{orig_username}/post/{orig_code}" if orig_code else "",
+                    "likes": reposted.get("like_count", 0),
+                    "media_urls": orig_image_urls,
+                    "video_urls": orig_video_urls,
+                }
+
             return Post(
                 id=post_id,
                 platform="threads",
@@ -126,6 +163,9 @@ class ResponseInterceptor:
                 quotes=quote_count,
                 media_urls=image_urls,
                 video_urls=video_urls,
+                is_repost=is_repost,
+                original_author=original_author,
+                quoted_post=quoted_post,
                 is_ad=is_ad,
             )
 

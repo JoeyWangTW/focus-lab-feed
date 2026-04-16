@@ -1,9 +1,12 @@
 """YouTube feed data extraction from ytInitialData and browse API responses."""
 
+import asyncio
 import json
 import re
 from datetime import datetime
 from pathlib import Path
+from urllib.request import urlopen, Request
+from urllib.error import URLError
 
 from src.models import Post
 
@@ -89,6 +92,51 @@ class ResponseInterceptor:
         shorts = [p for p in posts if p.platform_data.get("type") == "short"]
         print(f"[parser:youtube] {len(posts)} items ({len(videos)} videos, {len(shorts)} shorts)")
         return posts
+
+    async def enrich_missing_authors(self, posts: list[Post]) -> list[Post]:
+        """Use YouTube oEmbed API to fill in missing author names for shorts/videos."""
+        missing = [p for p in posts if not p.author_name]
+        if not missing:
+            return posts
+
+        print(f"[enricher:youtube] Enriching {len(missing)} posts missing author info via oEmbed...")
+
+        enriched = 0
+        # Process in batches of 5 to avoid hammering the API
+        for i in range(0, len(missing), 5):
+            batch = missing[i:i+5]
+            tasks = [self._fetch_oembed(p) for p in batch]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for post, result in zip(batch, results):
+                if isinstance(result, dict):
+                    if result.get("author_name"):
+                        post.author_name = result["author_name"]
+                        post.author_handle = result.get("author_handle", result["author_name"])
+                        enriched += 1
+            # Small delay between batches
+            if i + 5 < len(missing):
+                await asyncio.sleep(0.5)
+
+        print(f"[enricher:youtube] Enriched {enriched}/{len(missing)} posts with author info")
+        return posts
+
+    async def _fetch_oembed(self, post: Post) -> dict:
+        """Fetch oEmbed data for a YouTube video/short."""
+        url = f"https://www.youtube.com/oembed?url={post.url}&format=json"
+        try:
+            req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(None, lambda: urlopen(req, timeout=10))
+            data = json.loads(response.read())
+            result = {"author_name": data.get("author_name", "")}
+            # Extract handle from author_url (e.g., https://www.youtube.com/@handle)
+            author_url = data.get("author_url", "")
+            if "/@" in author_url:
+                result["author_handle"] = author_url.split("/@")[-1]
+            return result
+        except Exception as e:
+            print(f"[enricher:youtube] oEmbed failed for {post.id}: {e}")
+            return {}
 
     def _parse_grid_item(self, item: dict) -> list[Post]:
         """Parse a richGridRenderer item (video, shorts shelf, or ad)."""

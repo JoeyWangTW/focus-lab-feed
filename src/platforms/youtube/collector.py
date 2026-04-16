@@ -37,7 +37,8 @@ async def run(config: dict) -> dict:
     output_dir = config.get("output_dir", "feed_data")
     platform_config = config.get("platforms", {}).get("youtube", config)
 
-    run_dir = get_run_dir(output_dir, platform="youtube")
+    job_id = config.get("_job_id")
+    run_dir = get_run_dir(output_dir, platform="youtube", job_id=job_id)
     set_run_dir(run_dir)
     print(f"[youtube] Run directory: {run_dir}")
 
@@ -129,6 +130,8 @@ async def run(config: dict) -> dict:
 
         if posts:
             unique_posts, dupes_removed = deduplicate_within_run(posts)
+            # Enrich posts missing author info (shorts, some videos) via oEmbed
+            unique_posts = await interceptor.enrich_missing_authors(unique_posts)
             # No media download for YouTube — we use embeds
             save_posts(unique_posts, run_dir, platform="youtube", duration_seconds=duration)
         else:
