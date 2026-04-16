@@ -3,3 +3,8 @@ feed_data/
 __pycache__/
 .venv/
 *.pyc
+build/
+dist/
+*.spec.bak
+.DS_Store
+scripts/ralph/.last-branch
