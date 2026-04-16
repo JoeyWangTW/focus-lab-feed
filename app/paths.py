@@ -59,6 +59,43 @@ CONFIG_PATH = DATA_DIR / "config.json"
 SESSION_DIR = DATA_DIR / "session"
 FEED_DATA_DIR = DATA_DIR / "feed_data"
 
+
+def suggested_workspace_dir() -> Path:
+    """A suggested default path for the first-time setup prompt. Not created
+    automatically — the user must explicitly set up a workspace to create it.
+    """
+    return Path.home() / "Focus Lab Feed"
+
+
+def get_workspace_dir() -> Path | None:
+    """Return the configured workspace/curation directory, or None if not set up.
+
+    Reads `workspace_dir` from config.json. No default is returned — the user
+    must explicitly set this up via the Setup flow before exports can run.
+    """
+    if not CONFIG_PATH.exists():
+        return None
+    try:
+        cfg = json.loads(CONFIG_PATH.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+    ws = cfg.get("workspace_dir")
+    if not ws:
+        return None
+    p = Path(ws).expanduser().resolve()
+    return p if p.exists() else None
+
+
+def skill_source_dir() -> Path:
+    """Where the canonical curator skill lives in the install.
+
+    Bundled: extracted into MEIPASS by PyInstaller.
+    Dev: the project's skills/ folder.
+    """
+    if IS_BUNDLED:
+        return MEIPASS / "skills" / "focus-lab-curator"
+    return PROJECT_ROOT / "skills" / "focus-lab-curator"
+
 # Static assets (HTML/CSS/JS)
 if IS_BUNDLED:
     STATIC_DIR = MEIPASS / "app" / "static"

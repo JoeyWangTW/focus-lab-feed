@@ -18,10 +18,14 @@ const App = {
             collect: window.CollectPage || { render: () => '<div class="empty-state"><div class="icon">&#9655;</div><p>Loading collection...</p></div>' },
             viewer: window.ViewerPage || { render: () => '<div class="empty-state"><div class="icon">&#9776;</div><p>Loading viewer...</p></div>' },
             export: window.ExportPage || { render: () => '<div class="empty-state"><div class="icon">&#8681;</div><p>Loading export...</p></div>' },
+            curate: window.CuratePage || { render: () => '<div class="empty-state"><div class="icon">&#9883;</div><p>Loading curation...</p></div>' },
         };
 
         // Show main app
         document.getElementById('app').style.display = 'flex';
+
+        // Populate workspace chip (runs once; refreshWorkspaceChip binds button handler)
+        this.refreshWorkspaceChip();
 
         // Nav click handlers
         document.querySelectorAll('.nav-item').forEach(item => {
@@ -71,7 +75,7 @@ const App = {
             <div class="onboarding-overlay">
                 <div class="onboarding-content">
                     <div style="font-size:48px;margin-bottom:24px">🔬</div>
-                    <h1>Focus Lab Feed Collector</h1>
+                    <h1>Focus Lab Feed</h1>
                     <p>First-time setup: we need to download a browser engine to collect social media feeds.</p>
                     <button class="btn btn-primary" id="setup-start-btn" onclick="App.startSetup()">
                         Set Up Now
@@ -133,6 +137,35 @@ const App = {
         } catch (e) {
             document.getElementById('setup-msg').textContent = `Error: ${e.message}`;
             document.getElementById('setup-msg').classList.add('text-danger');
+        }
+    },
+
+    async refreshWorkspaceChip() {
+        try {
+            const ws = await api('/workspace');
+            const pathEl = document.getElementById('workspace-path');
+            const openBtn = document.getElementById('workspace-open-btn');
+            if (!pathEl || !openBtn) return;
+            if (ws.is_setup) {
+                const home = (ws.path || '').replace(/^\/Users\/[^/]+/, '~');
+                pathEl.textContent = home;
+                pathEl.title = ws.path || '';
+                openBtn.textContent = 'Open folder';
+                openBtn.disabled = false;
+            } else {
+                pathEl.textContent = 'Not set up';
+                pathEl.title = '';
+                openBtn.textContent = 'Go to Export to set up';
+                openBtn.disabled = false;
+                openBtn.onclick = () => { location.hash = 'export'; };
+                return;
+            }
+            openBtn.onclick = async () => {
+                try { await api('/workspace/reveal', { method: 'POST', body: JSON.stringify({}) }); }
+                catch (e) { console.warn('Reveal failed:', e); }
+            };
+        } catch (e) {
+            console.warn('Workspace info unavailable:', e);
         }
     },
 

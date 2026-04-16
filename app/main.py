@@ -13,6 +13,7 @@ import uvicorn
 from app.paths import DATA_DIR, IS_BUNDLED, STATIC_DIR, initialize
 
 initialize()
+# Workspace is created on explicit user setup (see app/api/workspace.py), not here.
 
 DEFAULT_PORT = 8741
 
@@ -72,8 +73,30 @@ def main():
 
         try:
             import webview
+
+            class JsApi:
+                """Exposed to the web frontend as `window.pywebview.api.*`.
+
+                Adds capabilities that require native OS integration — e.g.,
+                showing the macOS folder picker for the workspace setup flow.
+                """
+
+                def pick_folder(self, initial: str = "") -> str | None:
+                    windows = webview.windows
+                    if not windows:
+                        return None
+                    result = windows[0].create_file_dialog(
+                        webview.FOLDER_DIALOG,
+                        directory=initial or "",
+                        allow_multiple=False,
+                    )
+                    if not result:
+                        return None
+                    # result is a tuple of paths; take the first
+                    return result[0] if isinstance(result, (list, tuple)) else str(result)
+
             print(f"[app] Opening native window (server at {url})")
-            webview.create_window("Focus Lab Feed Collector", url, width=1200, height=800)
+            webview.create_window("Focus Lab Feed", url, width=1200, height=800, js_api=JsApi())
             webview.start()
         except ImportError:
             print(f"[app] Starting server at {url}")

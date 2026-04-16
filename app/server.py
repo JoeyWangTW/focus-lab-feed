@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import auth, collection, config, data, export, setup
+from app.api import auth, collection, config, data, export, setup, workspace
 from app.paths import FEED_DATA_DIR, STATIC_DIR
 from src.storage import migrate_legacy_runs
 
@@ -29,6 +29,7 @@ def create_app() -> FastAPI:
     app.include_router(data.router, prefix="/api/data", tags=["data"])
     app.include_router(export.router, prefix="/api/export", tags=["export"])
     app.include_router(setup.router, prefix="/api/setup", tags=["setup"])
+    app.include_router(workspace.router, prefix="/api/workspace", tags=["workspace"])
 
     # Serve collected data (media files, JSON)
     FEED_DATA_DIR.mkdir(parents=True, exist_ok=True)

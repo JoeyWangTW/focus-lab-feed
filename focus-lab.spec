@@ -14,6 +14,8 @@ a = Analysis(
         ('app/static', 'app/static'),
         ('config.json', '.'),
         ('src', 'src'),
+        ('skills', 'skills'),
+        ('viewer', 'viewer'),
     ],
     hiddenimports=[
         # FastAPI + Starlette
@@ -153,7 +155,7 @@ app = BUNDLE(
     bundle_identifier='com.focuslab.feedcollector',
     info_plist={
         'NSPrincipalClass': 'NSApplication',
-        'CFBundleDisplayName': 'Focus Lab Feed Collector',
+        'CFBundleDisplayName': 'Focus Lab Feed',
         'CFBundleShortVersionString': '0.1.0',
         'CFBundleVersion': '0.1.0',
         'NSHighResolutionCapable': True,

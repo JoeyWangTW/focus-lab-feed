@@ -8,3 +8,8 @@ dist/
 *.spec.bak
 .DS_Store
 scripts/ralph/.last-branch
+# Workspace-local files (bootstrapped on first app run; not shared state)
+/.claude/
+/exports/
+/goals.md
+/AGENTS.md

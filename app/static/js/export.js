@@ -1,43 +1,63 @@
 /**
- * Export Page — export collected data in various formats
+ * Export Page — two flows:
+ *   1. Curated export → bootstrapped folder in user's workspace
+ *      (Setup flow triggers if workspace not configured yet)
+ *   2. Raw export → single JSON or CSV file in ~/Downloads/
  */
 window.ExportPage = {
     runs: [],
+    dates: [],
+    workspace: null, // { is_setup, path, suggested_path, ... }
 
     render() {
         return `
             <div class="fade-in">
                 <h1 class="page-title">Export</h1>
+
                 <div class="card">
-                    <h3 class="font-semibold text-subtitle mb-3">Select Runs</h3>
+                    <h3 class="font-semibold text-subtitle mb-3">Select runs</h3>
                     <div id="export-runs" class="mb-4">
-                        <div class="text-secondary">Loading...</div>
+                        <div class="text-secondary">Loading…</div>
                     </div>
                     <div class="flex items-center gap-2 mb-1">
-                        <button class="btn btn-secondary btn-sm" onclick="ExportPage.selectAll()">Select All</button>
-                        <button class="btn btn-secondary btn-sm" onclick="ExportPage.selectNone()">Select None</button>
+                        <button class="btn btn-secondary btn-sm" onclick="ExportPage.selectAll()">Select all</button>
+                        <button class="btn btn-secondary btn-sm" onclick="ExportPage.selectNone()">Select none</button>
                     </div>
                 </div>
-                <div class="card">
-                    <h3 class="font-semibold text-subtitle mb-3">Export Format</h3>
-                    <div class="export-formats">
-                        <label>
-                            <input type="radio" name="export-format" value="json" checked> JSON
-                        </label>
-                        <label>
-                            <input type="radio" name="export-format" value="csv"> CSV
-                        </label>
-                        <label>
-                            <input type="radio" name="export-format" value="focus_lab"> Focus Lab
-                        </label>
+
+                <div class="card" id="curation-card">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-semibold text-subtitle">Curation export</h3>
+                        <span class="text-secondary text-sm">Primary</span>
                     </div>
-                    <button class="btn btn-primary" id="export-btn" onclick="ExportPage.doExport()">Export</button>
+                    <p class="text-secondary text-sm mb-3">
+                        Writes a ready-to-curate folder with <code>posts.json</code>, media, the mobile viewer,
+                        and a copy of your <code>goals.md</code>. <code>cd</code> into it and your agent
+                        (Claude Code / Cursor / Codex) will pick up the curator skill automatically.
+                    </p>
+                    <div id="curation-body"></div>
+                </div>
+
+                <div class="card">
+                    <h3 class="font-semibold text-subtitle mb-3">Raw export</h3>
+                    <p class="text-secondary text-sm mb-3">
+                        Single file in <code>~/Downloads/</code> — for analysis, backup, or piping elsewhere.
+                        No media, no zip.
+                    </p>
+                    <div class="export-formats mb-3">
+                        <label><input type="radio" name="raw-format" value="json" checked> JSON</label>
+                        <label><input type="radio" name="raw-format" value="csv"> CSV</label>
+                    </div>
+                    <button class="btn btn-secondary" id="raw-export-btn" onclick="ExportPage.doRawExport()">
+                        Export raw
+                    </button>
                 </div>
             </div>
         `;
     },
 
     async init() {
+        // Runs
         try {
             const data = await api('/data/runs');
             this.dates = data.dates || [];
@@ -46,6 +66,136 @@ window.ExportPage = {
         } catch (e) {
             document.getElementById('export-runs').innerHTML =
                 `<div class="text-danger">Failed to load runs</div>`;
+        }
+
+        // Workspace — drives the curation card
+        await this.refreshWorkspace();
+    },
+
+    async refreshWorkspace() {
+        try {
+            this.workspace = await api('/workspace');
+        } catch (e) {
+            this.workspace = { is_setup: false };
+        }
+        this.renderCurationBody();
+    },
+
+    renderCurationBody() {
+        const body = document.getElementById('curation-body');
+        if (!body) return;
+
+        if (!this.workspace || !this.workspace.is_setup) {
+            const suggested = (this.workspace && this.workspace.suggested_path) || '~/Focus Lab Feed';
+            const hasPicker = !!(window.pywebview && window.pywebview.api && window.pywebview.api.pick_folder);
+            body.innerHTML = `
+                <div class="setup-box">
+                    <div class="setup-title">Set up a curation folder</div>
+                    <p class="text-secondary text-sm mb-3">
+                        Pick any folder (we'll create it if it doesn't exist) — packs will land inside an
+                        <code>exports/</code> subfolder there, and we'll seed the curator skill, a blank
+                        <code>goals.md</code>, and agent-discovery files so <code>claude</code> works out of the box.
+                    </p>
+                    <div class="setup-row">
+                        <input type="text" id="setup-path" class="setup-input" value="${suggested.replace(/^\/Users\/[^/]+/, '~')}">
+                        ${hasPicker ? '<button class="btn btn-secondary btn-sm" id="setup-pick-btn" onclick="ExportPage.pickFolder()">Choose…</button>' : ''}
+                        <button class="btn btn-primary btn-sm" id="setup-btn" onclick="ExportPage.doSetup()">Create & set up</button>
+                    </div>
+                    <div class="text-secondary text-xs mt-2">
+                        ${hasPicker
+                            ? 'Tap <strong>Choose…</strong> for the native picker, or type a path. Pick something inside iCloud Drive for auto-sync.'
+                            : 'Type a path. Pick something inside iCloud Drive if you want auto-sync across Macs.'}
+                    </div>
+                    <div id="setup-error" class="text-danger text-sm mt-2" hidden></div>
+                </div>
+            `;
+            return;
+        }
+
+        const path = this.workspace.path || '';
+        const pretty = path.replace(/^\/Users\/[^/]+/, '~');
+        body.innerHTML = `
+            <div class="curation-dir-row">
+                <div class="curation-dir-label">Destination</div>
+                <div class="curation-dir-path" title="${path}">${pretty}/exports/</div>
+                <button class="btn btn-secondary btn-sm" onclick="ExportPage.changeWorkspace()">Change…</button>
+            </div>
+            <button class="btn btn-primary" id="curation-export-btn" onclick="ExportPage.doCurationExport()">
+                Export for curation
+            </button>
+        `;
+    },
+
+    async pickFolder() {
+        if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.pick_folder) return;
+        const input = document.getElementById('setup-path');
+        const initial = (input && input.value || '').replace(/^~/, '/Users/' + (navigator.userAgent.match(/Mac/) ? '' : ''));
+        try {
+            const picked = await window.pywebview.api.pick_folder('');
+            if (picked && input) {
+                input.value = picked.replace(/^\/Users\/[^/]+/, '~');
+                input.dataset.absolute = picked;
+            }
+        } catch (e) {
+            console.warn('Folder picker failed:', e);
+        }
+    },
+
+    async doSetup() {
+        const input = document.getElementById('setup-path');
+        const errEl = document.getElementById('setup-error');
+        const btn = document.getElementById('setup-btn');
+        // Prefer the absolute path from the native picker if available (the input
+        // shows a `~`-prettified version but the backend wants a real path).
+        const absPath = (input && input.dataset && input.dataset.absolute) || '';
+        const rawPath = (absPath || (input && input.value || '')).trim();
+        if (!rawPath) { this._setupError('Please enter a folder path.'); return; }
+
+        if (btn) { btn.disabled = true; btn.textContent = 'Setting up…'; }
+        errEl.hidden = true;
+        try {
+            const r = await api('/workspace/setup', {
+                method: 'POST',
+                body: JSON.stringify({ path: rawPath }),
+            });
+            if (r.success) {
+                await this.refreshWorkspace();
+                if (window.App && App.refreshWorkspaceChip) App.refreshWorkspaceChip();
+                this._showToast(`Workspace ready at <strong>${r.workspace.replace(/^\/Users\/[^/]+/, '~')}</strong>
+                    — bootstrapped ${r.created.length} item${r.created.length === 1 ? '' : 's'}`);
+            }
+        } catch (e) {
+            this._setupError(e.message || String(e));
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = 'Create & set up'; }
+        }
+    },
+
+    _setupError(msg) {
+        const el = document.getElementById('setup-error');
+        if (el) { el.textContent = msg; el.hidden = false; }
+    },
+
+    async changeWorkspace() {
+        const current = this.workspace && this.workspace.path || '';
+        let next = null;
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.pick_folder) {
+            try { next = await window.pywebview.api.pick_folder(current); }
+            catch (e) { console.warn('Picker failed:', e); }
+        }
+        if (!next) {
+            next = prompt('New workspace folder path:', current);
+        }
+        if (!next || next === current) return;
+        try {
+            await api('/workspace/setup', {
+                method: 'POST',
+                body: JSON.stringify({ path: next }),
+            });
+            await this.refreshWorkspace();
+            if (window.App && App.refreshWorkspaceChip) App.refreshWorkspaceChip();
+        } catch (e) {
+            alert('Could not change workspace: ' + e.message);
         }
     },
 
@@ -129,49 +279,81 @@ window.ExportPage = {
         container.innerHTML = html;
     },
 
-    selectAll() {
-        document.querySelectorAll('.export-run-chk').forEach(c => c.checked = true);
+    selectAll() { document.querySelectorAll('.export-run-chk').forEach(c => c.checked = true); },
+    selectNone() { document.querySelectorAll('.export-run-chk').forEach(c => c.checked = false); },
+
+    _selectedRuns() {
+        return [...document.querySelectorAll('.export-run-chk:checked')].map(c => c.value);
     },
 
-    selectNone() {
-        document.querySelectorAll('.export-run-chk').forEach(c => c.checked = false);
-    },
-
-    async doExport() {
-        const selectedRuns = [...document.querySelectorAll('.export-run-chk:checked')].map(c => c.value);
-        if (selectedRuns.length === 0) {
-            alert('Select at least one run to export');
-            return;
+    _showToast(html, timeoutMs = 8000) {
+        let toast = document.getElementById('export-toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'export-toast';
+            document.getElementById('content').appendChild(toast);
         }
+        toast.className = 'export-toast';
+        toast.innerHTML = html;
+        toast.style.display = 'block';
+        setTimeout(() => { toast.style.display = 'none'; }, timeoutMs);
+    },
 
-        const format = document.querySelector('input[name="export-format"]:checked').value;
-        const btn = document.querySelector('#export-btn');
-        if (btn) { btn.disabled = true; btn.textContent = 'Exporting...'; }
+    async doCurationExport() {
+        const runs = this._selectedRuns();
+        if (runs.length === 0) { alert('Select at least one run'); return; }
+
+        const btn = document.getElementById('curation-export-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Exporting…'; }
 
         try {
-            const result = await api('/export', {
+            const r = await api('/export/curation', {
                 method: 'POST',
-                body: JSON.stringify({ run_ids: selectedRuns, format }),
+                body: JSON.stringify({ run_ids: runs }),
             });
-
-            if (btn) { btn.disabled = false; btn.textContent = 'Export'; }
-
-            if (result.success) {
-                // Show success toast
-                let toast = document.getElementById('export-toast');
-                if (!toast) {
-                    toast = document.createElement('div');
-                    toast.id = 'export-toast';
-                    document.getElementById('content').appendChild(toast);
-                }
-                toast.className = 'export-toast';
-                toast.innerHTML = `Saved <strong>${result.filename}</strong> to Downloads — ${result.post_count} posts, ${result.media_count} media files (${result.size})`;
-                toast.style.display = 'block';
-                setTimeout(() => { toast.style.display = 'none'; }, 5000);
+            if (r.success) {
+                const pretty = r.path.replace(/^\/Users\/[^/]+/, '~');
+                this._showToast(
+                    `Pack ready at <strong>${pretty}</strong> — ${r.post_count} posts, ${r.media_count} media (${r.size}) ·
+                     <a href="#" id="export-reveal" style="color:var(--accent);text-decoration:underline">Open folder</a>`
+                );
+                const reveal = document.getElementById('export-reveal');
+                if (reveal) reveal.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    try { await api('/workspace/reveal', { method: 'POST', body: JSON.stringify({ path: r.path }) }); }
+                    catch (err) { console.warn('Reveal failed:', err); }
+                });
+                if (window.App && App.refreshWorkspaceChip) App.refreshWorkspaceChip();
             }
         } catch (e) {
-            if (btn) { btn.disabled = false; btn.textContent = 'Export'; }
-            alert('Export failed: ' + e.message);
+            alert('Curation export failed: ' + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = 'Export for curation'; }
+        }
+    },
+
+    async doRawExport() {
+        const runs = this._selectedRuns();
+        if (runs.length === 0) { alert('Select at least one run'); return; }
+        const format = document.querySelector('input[name="raw-format"]:checked').value;
+
+        const btn = document.getElementById('raw-export-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Exporting…'; }
+
+        try {
+            const r = await api('/export/raw', {
+                method: 'POST',
+                body: JSON.stringify({ run_ids: runs, format }),
+            });
+            if (r.success) {
+                this._showToast(
+                    `Saved <strong>${r.filename}</strong> to Downloads — ${r.post_count} posts (${r.size})`
+                );
+            }
+        } catch (e) {
+            alert('Raw export failed: ' + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = 'Export raw'; }
         }
     },
 };
