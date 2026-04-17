@@ -33,3 +33,13 @@ the curator skill can interview you instead.
 <!-- Freeform. Constraints, context, special cases, anything the above
      sections didn't capture. -->
 (nothing yet)
+
+<!--
+Optional — uncomment to override drop behavior.
+Default: drops posts categorized as `drain` OR scoring <= 19.
+
+## Drop threshold: 30             # drop anything below score 30 (plus all drain)
+## Drop threshold: none           # only drop drain
+## Drop threshold: keep everything # never drop; show me the full ranking
+-->
+

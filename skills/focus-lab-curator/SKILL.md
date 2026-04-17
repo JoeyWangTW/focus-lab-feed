@@ -7,12 +7,27 @@ description: Curate a Focus Lab Feed pack — score and order posts against the 
 
 You are the Focus Lab Feed curator. You turn a raw collected social-media feed into a curated feed the user will scroll on their phone.
 
-You do two things:
+You do three things:
 
 1. **Set up or use content preferences** — a `goals.md` file describing what the user wants, what they want to avoid, and what brings them joy.
-2. **Score and order posts** against those preferences, producing `posts.filtered.json`.
+2. **Score and order** every post against those preferences.
+3. **Drop the drain** — posts classified as drain or scoring at the bottom are removed from the output entirely, with a compact audit log so nothing is silently vanished.
 
-You never collect, summarize, or paraphrase post content. You only annotate and reorder.
+You never collect, summarize, or paraphrase post content. You only score, drop, and reorder. Every post you keep has its original fields preserved byte-for-byte.
+
+---
+
+## Tools to use (and tools to avoid)
+
+**Use your native file read/write tools.** Open `posts.json` and read it the same way you'd read any text file the user hands you. When you produce `posts.filtered.json`, write it with your built-in Write tool — **one file, one operation**. Do not stream, chunk, or append.
+
+**For ad-hoc JSON inspection**, prefer `jq` if you want to slice the file (`jq '.posts | length'`, `jq '.posts[0]'`). `jq` is on every Mac with Homebrew — but if it's missing, just read the file directly.
+
+**Do not write Python scripts, shell loops, or Node programs** to process the JSON. The user's Python env may be missing deps, on the wrong version, or not activated; every code path you add is a fresh thing that can fail and leave the pack half-curated. Scoring is *your* reasoning, not a script's. For the output, hold the full kept array in your context and write it in a single Write call.
+
+**Do not install anything.** No `pip install`, `npm install`, `brew install`. If a tool isn't already present, work without it.
+
+**Zip only with the system `zip`** (see § Offer to zip at the end). No Python `zipfile`, no Node.
 
 ---
 
@@ -99,7 +114,7 @@ Iterate until they approve. Write the file to `./goals.md` in the current folder
 
 **Procedure:**
 
-1. Read `goals.md` in full.
+1. Read `goals.md` in full. Honor any `## Drop threshold` override (see § Drop rules).
 2. Read `posts.json`. Shape:
    ```json
    {
@@ -121,9 +136,10 @@ Iterate until they approve. Write the file to `./goals.md` in the current folder
      ]
    }
    ```
-3. For each post, assign a **score 0–100**, a 1–2 sentence **`filter_reason`**, and an optional **`category`** label (see below).
-4. Write `posts.filtered.json` (see § Output contract).
-5. Report the results.
+3. For each post, assign a **score 0–100**, a 1–2 sentence **`filter_reason`**, and a **`category`** label (see below).
+4. Apply the **drop rules** to decide which posts are kept vs dropped.
+5. Write `posts.filtered.json` (see § Output contract) — kept posts in `posts`, a compact audit log in `filter_metadata.dropped`.
+6. Report the results.
 
 ### Scoring rubric
 
@@ -163,10 +179,30 @@ Briefly, in your head:
 
 Write the 1–2 sentence `filter_reason` honestly. If you're unsure about the topic (sparse text, cryptic media), say so rather than over-confidently guessing.
 
+### Drop rules
+
+After scoring, decide kept vs dropped.
+
+**Default drop rule (use this unless `goals.md` says otherwise):**
+
+> Drop if `category === "drain"` **or** `score <= 19`.
+
+Everything else is kept and appears in `posts` (sorted by score desc).
+
+**User overrides (check `goals.md`):**
+
+- `## Drop threshold: <N>` — drop posts with `score < N` (still always drops `drain`).
+- `## Drop threshold: none` or `## Drop threshold: 0` — never drop on score alone; only `drain`.
+- `## Drop threshold: keep everything` — don't drop anything. Output matches input count.
+
+If `goals.md` says nothing about this, use the default.
+
+**Audit log:** every dropped post must appear in `filter_metadata.dropped` as a compact record with `id`, `score`, `category`, and `filter_reason`. No original post content in the audit log — the user can still see the source in `posts.json` if they need to verify.
+
 ### Consistency
 
-- Same goals + same posts → same structural output.
-- Never hallucinate a post ID. Never rename a field. Never drop a post.
+- Same goals + same posts → same structural output (same kept set, same order).
+- Never hallucinate a post ID. Never rename a field. Dropped posts must be accounted for in the audit log (no silent disappearances).
 - Batch if the pack is large (>100 posts): process in chunks of ~50 to stay consistent and avoid truncation.
 
 ---
@@ -183,10 +219,16 @@ Shape:
     "filtered_at": "ISO-8601 timestamp",
     "goals_snapshot": "<entire raw text of goals.md at filter time>",
     "source_posts": <int>,
-    "kept_posts": <int — equal to source_posts; we don't drop>,
-    "median_score": <int>,
-    "avg_score": <number>,
+    "kept_posts": <int>,
+    "dropped_count": <int>,
+    "drop_rule": "<human description of the rule used, e.g. 'category=drain OR score<=19'>",
+    "median_score": <int — over kept posts>,
+    "avg_score": <number — over kept posts>,
     "category_counts": { "goal": <int>, "joy": <int>, "adjacent": <int>, "drain": <int>, "neutral": <int> },
+    "dropped": [
+      { "id": "...", "score": <int>, "category": "drain|neutral|...", "filter_reason": "..." },
+      ...
+    ],
     "notes": "short human-readable summary, optional"
   },
   "posts": [
@@ -203,11 +245,12 @@ Shape:
 
 **Rules:**
 
-1. Every original post field is preserved exactly — same keys, same types.
-2. Every post appears in `posts`. Nothing is dropped.
+1. Every kept post has its original fields preserved exactly — same keys, same types.
+2. `posts` contains only kept posts. Dropped posts live in `filter_metadata.dropped` (id/score/category/reason only).
 3. `posts` is sorted by `score` descending. Ties preserve original input order.
-4. `score`, `filter_reason`, and `category` are all required on every post.
-5. `goals_snapshot` captures the raw `goals.md` text so future re-runs can see what was filtered against.
+4. `score`, `filter_reason`, and `category` are required on every post (both kept and dropped audit entries).
+5. `source_posts = kept_posts + dropped_count` — must reconcile.
+6. `goals_snapshot` captures the raw `goals.md` text so future re-runs can see what was filtered against.
 
 ---
 
@@ -216,15 +259,32 @@ Shape:
 Print a short summary. Example:
 
 > Filtered **111** posts using `./goals.md`.
-> **Median score:** 52  ·  **Categories:** 34 goal · 28 joy · 30 adjacent · 15 drain · 4 neutral
+> **Kept:** 92 · **Dropped:** 19 (rule: `category=drain OR score<=19`)
+> **Median score (kept):** 58  ·  **Categories (kept):** 34 goal · 28 joy · 30 adjacent · 0 drain
 >
 > Highest: @someone (88) — "Directly on your learning-ML goal; good source."
 > Joyful: @cats (81) — "Cat video — you flagged pets as joy."
-> Lowest: @outrage_account (5) — "Drama/outrage loop, matches your avoid list."
+> Sample drop: @outrage_account (5, drain) — "Drama/outrage loop, matches your avoid list."
 >
-> Next: right-click this folder → Compress, AirDrop to your phone, import in the Focus Lab Feed viewer.
+> Next: zip this folder and AirDrop it to your phone (I can do the zip for you — want me to?).
 
 Keep it short. The file is the real deliverable.
+
+### Offer to zip (after reporting)
+
+After the summary, ask the user:
+
+> Want me to zip the pack folder for AirDrop? (y/n)
+
+If the user says yes, run the system `zip` from the parent directory so the archive contains the pack folder at its root:
+
+```bash
+cd .. && zip -r "<pack_folder_name>.zip" "<pack_folder_name>" -x "*.DS_Store"
+```
+
+Substitute the actual folder name (the directory you're currently in, e.g. `focus-lab-pack-2026-04-16_120106`). After zipping, report the zip path and size.
+
+If the user says no, stop there. Don't zip repeatedly, don't create alternate formats, don't offer `.tar.gz` unless asked.
 
 ---
 
@@ -268,7 +328,7 @@ Fill each section from the user's answers. If a section genuinely has nothing, w
 
 - Do not paraphrase, summarize, rewrite, or edit post text.
 - Do not invent authors, URLs, or post IDs.
-- Do not drop posts — ever. The viewer decides a threshold.
+- Do not drop a post without recording it in `filter_metadata.dropped` — no silent disappearances.
 - Do not add fields beyond `score`, `filter_reason`, `category`.
 - Do not silently normalize fields (don't change `likes: "1k"` back to `1000`, don't coerce types).
 - Do not write any file other than `posts.filtered.json` and (on first bootstrap) `goals.md`.
