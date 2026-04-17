@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- macOS app-icon shaped canvas: 1024×1024 with ~22.5% corner radius.
+       Transparent outside the squircle so it composites cleanly on any Dock. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a2530"/>
+      <stop offset="1" stop-color="#0a0e12"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="230" ry="230" fill="url(#bg)"/>
+
+  <!-- Logo centered with ~16% padding, stroked in white for contrast against
+       the dark squircle. Group scale keeps proportions from the 400×400 master. -->
+  <g transform="translate(162, 162) scale(1.75)"
+     fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 190 25
+             C 235 15, 295 50, 335 85
+             C 375 115, 385 160, 380 200
+             C 375 255, 355 300, 315 330
+             C 275 360, 225 390, 175 385
+             C 125 380, 75 360, 55 315
+             C 35 270, 25 215, 45 175
+             C 65 135, 95 90, 135 65
+             C 165 45, 175 30, 190 25 Z"
+          stroke-width="7"/>
+    <path d="M 175 90
+             C 215 75, 275 110, 305 140
+             C 335 170, 350 215, 335 255
+             C 320 295, 280 335, 240 345
+             C 200 355, 150 340, 115 315
+             C 80 290, 65 245, 75 200
+             C 85 155, 115 120, 145 105
+             C 160 95, 165 92, 175 90 Z"
+          stroke-width="6"/>
+    <path d="M 185 160
+             C 220 145, 260 175, 275 205
+             C 290 235, 280 280, 250 300
+             C 220 320, 175 315, 145 295
+             C 115 275, 110 235, 125 200
+             C 140 165, 165 165, 185 160 Z"
+          stroke-width="5"/>
+  </g>
+</svg>

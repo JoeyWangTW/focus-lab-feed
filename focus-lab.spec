@@ -17,6 +17,7 @@ a = Analysis(
         ('skills', 'skills'),
         ('viewer', 'viewer'),
         ('assets/focuslab-logo.svg', 'assets'),
+        ('assets/focuslab.icns', 'assets'),
     ],
     hiddenimports=[
         # FastAPI + Starlette
@@ -127,7 +128,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='Focus Lab Feed Collector',
+    name='Focus Lab Feed',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -146,16 +147,17 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='Focus Lab Feed Collector',
+    name='Focus Lab Feed',
 )
 
 app = BUNDLE(
     coll,
-    name='Focus Lab Feed Collector.app',
+    name='Focus Lab Feed.app',
     icon='assets/focuslab.icns',
-    bundle_identifier='com.focuslab.feedcollector',
+    bundle_identifier='com.focuslab.feed',
     info_plist={
         'NSPrincipalClass': 'NSApplication',
+        'CFBundleName': 'Focus Lab Feed',
         'CFBundleDisplayName': 'Focus Lab Feed',
         'CFBundleShortVersionString': '0.1.0',
         'CFBundleVersion': '0.1.0',

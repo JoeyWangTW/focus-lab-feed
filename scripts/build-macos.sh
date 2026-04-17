@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "=== Focus Lab Feed Collector — macOS Build ==="
+echo "=== Focus Lab Feed — macOS Build ==="
 
 # Ensure we're in project root
 cd "$(dirname "$0")/.."
@@ -31,7 +31,7 @@ echo "[build] Building .app bundle..."
 pyinstaller focus-lab.spec --noconfirm
 
 # Check if .app was created
-APP_PATH="dist/Focus Lab Feed Collector.app"
+APP_PATH="dist/Focus Lab Feed.app"
 if [ ! -d "$APP_PATH" ]; then
     echo "Error: .app bundle not found at $APP_PATH"
     exit 1
@@ -41,9 +41,9 @@ echo "[build] .app bundle created: $APP_PATH"
 
 # Create DMG
 echo "[build] Creating .dmg installer..."
-DMG_PATH="dist/FocusLabFeedCollector.dmg"
+DMG_PATH="dist/FocusLabFeed.dmg"
 hdiutil create \
-    -volname "Focus Lab Feed Collector" \
+    -volname "Focus Lab Feed" \
     -srcfolder "$APP_PATH" \
     -ov \
     -format UDZO \

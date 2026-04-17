@@ -10,10 +10,55 @@ from threading import Thread
 import uvicorn
 
 # Initialize paths and environment before anything else
-from app.paths import DATA_DIR, IS_BUNDLED, STATIC_DIR, initialize
+from pathlib import Path
+
+from app.paths import DATA_DIR, IS_BUNDLED, MEIPASS, PROJECT_ROOT, STATIC_DIR, initialize
 
 initialize()
 # Workspace is created on explicit user setup (see app/api/workspace.py), not here.
+
+
+def _icns_path() -> Path | None:
+    """Locate the .icns — for setting the Dock icon in dev mode (bundled .app
+    uses CFBundleIconFile from the spec instead)."""
+    if IS_BUNDLED and MEIPASS:
+        candidate = MEIPASS / "assets" / "focuslab.icns"
+    else:
+        candidate = PROJECT_ROOT / "assets" / "focuslab.icns"
+    return candidate if candidate.exists() else None
+
+
+def _apply_dock_icon() -> None:
+    """Override the Dock icon AND the app name shown on hover. Called once
+    pywebview has booted NSApplication. No-ops on non-macOS."""
+    try:
+        from AppKit import NSApplication, NSImage
+        from Foundation import NSBundle
+    except ImportError:
+        return
+
+    # Rename the running bundle so the Dock / App Switcher shows "Focus Lab
+    # Feed" instead of "Python". This works by patching the in-memory
+    # infoDictionary of the main bundle.
+    try:
+        bundle = NSBundle.mainBundle()
+        info = bundle.localizedInfoDictionary() or bundle.infoDictionary()
+        if info is not None:
+            info["CFBundleName"] = "Focus Lab Feed"
+            info["CFBundleDisplayName"] = "Focus Lab Feed"
+    except Exception as e:
+        print(f"[app] Could not set app name: {e}")
+
+    icns = _icns_path()
+    if icns is None:
+        return
+    try:
+        app_ns = NSApplication.sharedApplication()
+        img = NSImage.alloc().initWithContentsOfFile_(str(icns))
+        if img is not None:
+            app_ns.setApplicationIconImage_(img)
+    except Exception as e:
+        print(f"[app] Could not set Dock icon: {e}")
 
 DEFAULT_PORT = 8741
 
@@ -97,7 +142,9 @@ def main():
 
             print(f"[app] Opening native window (server at {url})")
             webview.create_window("Focus Lab Feed", url, width=1200, height=800, js_api=JsApi())
-            webview.start()
+            # pywebview's start() runs our callback on the main thread once
+            # NSApplication is live — that's when setApplicationIconImage_ sticks.
+            webview.start(_apply_dock_icon)
         except ImportError:
             print(f"[app] Starting server at {url}")
             if not IS_BUNDLED:

@@ -101,6 +101,10 @@ window.ExportPage = {
                         ${hasPicker ? '<button class="btn btn-secondary btn-sm" id="setup-pick-btn" onclick="ExportPage.pickFolder()">Choose…</button>' : ''}
                         <button class="btn btn-primary btn-sm" id="setup-btn" onclick="ExportPage.doSetup()">Create & set up</button>
                     </div>
+                    <label class="setup-checkbox">
+                        <input type="checkbox" id="setup-update-app-files" checked>
+                        <span>If the folder already has a Focus Lab workspace, refresh the curator skill and agent instructions to this version. Your <code>goals.md</code> is never touched.</span>
+                    </label>
                     <div class="text-secondary text-xs mt-2">
                         ${hasPicker
                             ? 'Tap <strong>Choose…</strong> for the native picker, or type a path. Pick something inside iCloud Drive for auto-sync.'
@@ -154,15 +158,20 @@ window.ExportPage = {
         if (btn) { btn.disabled = true; btn.textContent = 'Setting up…'; }
         errEl.hidden = true;
         try {
+            const updateCheckbox = document.getElementById('setup-update-app-files');
+            const updateAppFiles = !!(updateCheckbox && updateCheckbox.checked);
             const r = await api('/workspace/setup', {
                 method: 'POST',
-                body: JSON.stringify({ path: rawPath }),
+                body: JSON.stringify({ path: rawPath, update_app_files: updateAppFiles }),
             });
             if (r.success) {
                 await this.refreshWorkspace();
                 if (window.App && App.refreshWorkspaceChip) App.refreshWorkspaceChip();
-                this._showToast(`Workspace ready at <strong>${r.workspace.replace(/^\/Users\/[^/]+/, '~')}</strong>
-                    — bootstrapped ${r.created.length} item${r.created.length === 1 ? '' : 's'}`);
+                const parts = [];
+                if (r.created && r.created.length) parts.push(`${r.created.length} created`);
+                if (r.updated && r.updated.length) parts.push(`${r.updated.length} updated`);
+                const change = parts.length ? ` — ${parts.join(', ')}` : ' (nothing to change)';
+                this._showToast(`Workspace ready at <strong>${r.workspace.replace(/^\/Users\/[^/]+/, '~')}</strong>${change}`);
             }
         } catch (e) {
             this._setupError(e.message || String(e));

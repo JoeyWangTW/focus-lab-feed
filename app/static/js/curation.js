@@ -1,63 +1,67 @@
 /**
- * AI Curation page — pick an agent, get a copy-paste launch + prompt, edit goals.md.
+ * "How to" page — a walkthrough of the full flow:
+ * Connect → Collect → View (raw) OR Curate (agent) → View (curated) → ship
+ *
+ * Step 3b ("Curate") embeds the live agent picker + copy-paste launch command
+ * + goals editor so the instructions are actionable in place, not just prose.
  */
 window.CuratePage = {
-    workspace: null,          // /api/workspace response
-    goals: null,              // /api/workspace/goals response
+    workspace: null,          // /api/workspace
+    goals: null,              // /api/workspace/goals
+    packs: [],                // /api/curated/packs
     selectedAgent: 'claude-code',
-    selectedPack: '',         // pack folder name (empty = workspace root)
+    selectedPack: '',
 
     agents: [
         {
             id: 'claude-code',
             name: 'Claude Code',
-            tagline: 'Anthropic\'s terminal agent',
+            tagline: "Anthropic's terminal agent",
             launchCmd: (path) => `cd ${quote(path)}\nclaude`,
             prompt: () => `curate this feed`,
-            setup: 'Your workspace already has the skill installed at <code>.claude/skills/focus-lab-curator/</code>. Claude Code auto-discovers it.',
+            setup: 'Your workspace has the skill installed at <code>.claude/skills/focus-lab-curator/</code> — Claude Code auto-discovers it.',
         },
         {
             id: 'cursor',
             name: 'Cursor',
             tagline: 'AI-first IDE',
             launchCmd: (path) => `cursor ${quote(path)}`,
-            prompt: (path) => `Read \`skills/focus-lab-curator/SKILL.md\` and follow it to curate this feed — use my goals in \`goals.md\`, score posts from \`posts.json\`, and write \`posts.filtered.json\` in this folder.`,
-            setup: 'Open the folder in Cursor; the skill is available at <code>skills/focus-lab-curator/SKILL.md</code>. For auto-invocation, copy it to <code>.cursor/rules/</code>.',
+            prompt: () => `Read \`skills/focus-lab-curator/SKILL.md\` and follow it to curate this feed — use my goals in \`goals.md\`, score posts from \`posts.json\`, and write \`posts.filtered.json\` in this folder.`,
+            setup: 'Open the folder in Cursor; the skill is at <code>skills/focus-lab-curator/SKILL.md</code>. Copy into <code>.cursor/rules/</code> for auto-invocation.',
         },
         {
             id: 'codex',
             name: 'Codex CLI',
-            tagline: 'OpenAI\'s terminal agent',
+            tagline: "OpenAI's terminal agent",
             launchCmd: (path) => `cd ${quote(path)}\ncodex --instructions skills/focus-lab-curator/SKILL.md`,
             prompt: () => `curate this feed`,
-            setup: 'Point <code>--instructions</code> at the workspace skill file. Available via <code>npm i -g @openai/codex</code>.',
+            setup: 'Point <code>--instructions</code> at the workspace skill file.',
         },
         {
             id: 'any',
             name: 'Any other agent',
             tagline: 'Anything that reads a system prompt',
-            launchCmd: (path) => `cd ${quote(path)}\n# then launch your agent here`,
+            launchCmd: (path) => `cd ${quote(path)}\n# launch your agent here`,
             prompt: (path) => [
                 `You are in a Focus Lab Feed workspace: ${path}`,
                 ``,
                 `Read \`skills/focus-lab-curator/SKILL.md\` in full and follow it exactly.`,
-                `It will ask you to read my preferences in \`goals.md\`, score posts from`,
-                `\`posts.json\`, and write \`posts.filtered.json\` in this folder.`,
-                `Preserve every original post field. Never drop posts. Sort by score desc.`,
+                `Use my preferences in \`goals.md\`, score posts from \`posts.json\`,`,
+                `and write \`posts.filtered.json\` in this folder. Preserve every`,
+                `original field. Sort by score desc.`,
             ].join('\n'),
-            setup: 'Paste the contents of <code>skills/focus-lab-curator/SKILL.md</code> into your agent\'s system prompt.',
+            setup: "Paste <code>skills/focus-lab-curator/SKILL.md</code> into your agent's system prompt.",
         },
     ],
 
     render() {
         return `
             <div class="fade-in">
-                <h1 class="page-title">AI Curation</h1>
+                <h1 class="page-title">Instructions</h1>
                 <p class="text-secondary mb-4">
-                    Turn a collected pack into a goal-aligned feed. Edit your preferences, pick your agent,
-                    and copy the launch command.
+                    Scroll your social feeds for you, let your own AI agent curate them, and get back a feed you actually want to open.
                 </p>
-                <div id="curate-body">
+                <div id="howto-body">
                     <div class="empty-state"><p class="text-secondary">Loading…</p></div>
                 </div>
             </div>
@@ -65,165 +69,236 @@ window.CuratePage = {
     },
 
     async init() {
-        // Load workspace + goals in parallel
-        const [ws, goals] = await Promise.all([
+        const [ws, goals, curated] = await Promise.all([
             api('/workspace').catch(() => ({ is_setup: false })),
             api('/workspace/goals').catch(() => null),
+            api('/curated/packs').catch(() => ({ packs: [] })),
         ]);
         this.workspace = ws;
         this.goals = goals;
+        this.packs = (curated && curated.packs) || [];
+        this.selectedPack = this.packs[0] ? this.packs[0].name : '';
         this.renderBody();
     },
 
     renderBody() {
-        const body = document.getElementById('curate-body');
+        const body = document.getElementById('howto-body');
         if (!body) return;
 
-        if (!this.workspace || !this.workspace.is_setup) {
-            body.innerHTML = `
-                <div class="card">
-                    <h3 class="font-semibold text-subtitle mb-2">Workspace not set up</h3>
-                    <p class="text-secondary text-sm mb-3">
-                        Head over to <strong>Export</strong> to pick a curation folder. Once set up, come
-                        back here to wire up your agent.
-                    </p>
-                    <a href="#export" class="btn btn-primary">Go to Export</a>
-                </div>
-            `;
-            return;
-        }
+        body.innerHTML = [
+            this._stepConnect(),
+            this._stepCollect(),
+            this._stepView(),
+            this._stepCurate(),
+            this._stepShip(),
+        ].join('');
 
-        body.innerHTML = `
-            ${this._renderPackPicker()}
-            ${this._renderAgentPicker()}
-            ${this._renderCommands()}
-            ${this._renderGoalsEditor()}
-        `;
-
-        // Wire handlers
+        // Wire agent cards
         document.querySelectorAll('[data-agent-id]').forEach(el => {
             el.addEventListener('click', () => {
                 this.selectedAgent = el.dataset.agentId;
                 this.renderBody();
             });
         });
-        const packSel = document.getElementById('pack-select');
+
+        // Pack selector (used in the launch command)
+        const packSel = document.getElementById('howto-pack-select');
         if (packSel) {
             packSel.addEventListener('change', (e) => {
                 this.selectedPack = e.target.value;
                 this._refreshCommands();
             });
         }
+
+        // Goals save
         const saveBtn = document.getElementById('goals-save');
         if (saveBtn) saveBtn.addEventListener('click', () => this.saveGoals());
 
+        // Copy buttons
         document.querySelectorAll('.copy-btn').forEach(btn => {
             btn.addEventListener('click', () => this._copyToClipboard(btn));
         });
     },
 
+    // ---- Steps ----
+
+    _stepConnect() {
+        return `
+            <div class="howto-step">
+                <div class="howto-step-num">1</div>
+                <div class="howto-step-body">
+                    <h3 class="font-semibold text-subtitle mb-2">Connect a platform</h3>
+                    <p class="text-secondary text-sm mb-2">
+                        Go to <a href="#platforms">Platforms</a> and click the one you want to collect from — Twitter/X, Threads, Instagram, or YouTube.
+                        A real browser window opens; log in like you normally would. The app stores the session locally so it can scroll on your behalf later.
+                    </p>
+                    <p class="text-secondary text-xs">
+                        Nothing is sent to a server. No API tokens. Just automation of what you'd do yourself.
+                    </p>
+                </div>
+            </div>
+        `;
+    },
+
+    _stepCollect() {
+        return `
+            <div class="howto-step">
+                <div class="howto-step-num">2</div>
+                <div class="howto-step-body">
+                    <h3 class="font-semibold text-subtitle mb-2">Collect a feed</h3>
+                    <p class="text-secondary text-sm mb-2">
+                        Go to <a href="#collect">Collect</a>. Pick which connected platforms to include and how long to scroll. Hit Start.
+                        The app scrolls each platform in the background and captures posts + media into <code>feed_data/</code>.
+                    </p>
+                    <p class="text-secondary text-xs">
+                        Each run is timestamped. You can run it as often as you like — data accumulates.
+                    </p>
+                </div>
+            </div>
+        `;
+    },
+
+    _stepView() {
+        return `
+            <div class="howto-step">
+                <div class="howto-step-num">3a</div>
+                <div class="howto-step-body">
+                    <h3 class="font-semibold text-subtitle mb-2">View raw <span class="text-secondary text-sm">(quick)</span></h3>
+                    <p class="text-secondary text-sm">
+                        Head to <a href="#viewer">Feed</a> — every collected post, filterable by platform, sortable by time / likes / reposts / replies. Fast way to see what's there.
+                    </p>
+                </div>
+            </div>
+        `;
+    },
+
+    _stepCurate() {
+        const isSetup = this.workspace && this.workspace.is_setup;
+        const hasPack = this.packs.length > 0;
+        const agent = this.agents.find(a => a.id === this.selectedAgent);
+        const path = this._packFullPath();
+
+        return `
+            <div class="howto-step">
+                <div class="howto-step-num">3b</div>
+                <div class="howto-step-body">
+                    <h3 class="font-semibold text-subtitle mb-2">Curate, then view <span class="text-secondary text-sm">(recommended for phone)</span></h3>
+                    <p class="text-secondary text-sm mb-3">
+                        Export the posts into a pack, run your AI agent against it, then open the filtered result in <strong>AI Curation</strong>.
+                        On first run the agent will interview you and write <code>goals.md</code>; after that it scores every post (0–100) and drops the drain.
+                    </p>
+
+                    <div class="howto-substep">
+                        <div class="howto-substep-label">i. Export a pack</div>
+                        <p class="text-secondary text-sm">
+                            Go to <a href="#export">Export</a> → <em>Export for curation</em>.
+                            ${isSetup
+                                ? 'A folder lands in <code>' + esc(this.workspace.path.replace(/^\/Users\/[^/]+/, '~')) + '/exports/</code>.'
+                                : "First time you'll pick a workspace folder — that's where packs live."}
+                        </p>
+                    </div>
+
+                    <div class="howto-substep">
+                        <div class="howto-substep-label">ii. Run your agent</div>
+                        ${!isSetup || !hasPack ? `
+                            <p class="text-secondary text-sm">
+                                ${!isSetup ? "Set up a workspace on the Export page first." : "No packs exported yet — come back here after you've run an Export."}
+                            </p>
+                        ` : `
+                            <p class="text-secondary text-sm mb-2">Pick your agent and pack — we'll generate a ready-to-paste command.</p>
+
+                            <div class="howto-row">
+                                <label class="text-secondary text-xs">Pack</label>
+                                <select id="howto-pack-select" class="setup-input">
+                                    ${this.packs.filter(p => true).map(p =>
+                                        `<option value="${escAttr(p.name)}"${p.name === this.selectedPack ? ' selected' : ''}>${esc(p.name)}</option>`
+                                    ).join('')}
+                                </select>
+                            </div>
+
+                            <div class="agent-grid">
+                                ${this.agents.map(a => `
+                                    <button class="agent-card ${a.id === this.selectedAgent ? 'selected' : ''}"
+                                            data-agent-id="${a.id}">
+                                        <div class="agent-name">${a.name}</div>
+                                        <div class="agent-tagline">${a.tagline}</div>
+                                    </button>
+                                `).join('')}
+                            </div>
+                            <div class="agent-setup text-secondary text-sm mt-3 mb-3">${agent.setup}</div>
+
+                            <div class="howto-sublabel">Run this in your terminal</div>
+                            <div class="code-block-wrap">
+                                <pre class="code-block" id="launch-code">${esc(agent.launchCmd(path))}</pre>
+                                <button class="copy-btn" data-copy-target="launch-code">Copy</button>
+                            </div>
+
+                            <div class="howto-sublabel">Then paste this to the agent</div>
+                            <div class="code-block-wrap">
+                                <pre class="code-block" id="prompt-code">${esc(agent.prompt(path))}</pre>
+                                <button class="copy-btn" data-copy-target="prompt-code">Copy</button>
+                            </div>
+                        `}
+                    </div>
+
+                    <div class="howto-substep">
+                        <div class="howto-substep-label">iii. Edit your goals <span class="text-secondary text-xs">(optional)</span></div>
+                        <p class="text-secondary text-sm mb-2">
+                            ${isSetup
+                                ? 'The curator scores posts against this file. Leave it blank and the agent will interview you on first run.'
+                                : 'Once your workspace is set up, you can edit preferences here.'}
+                        </p>
+                        ${isSetup ? `
+                            <textarea id="goals-textarea" class="goals-textarea" rows="10" spellcheck="false">${esc((this.goals && this.goals.content) || '')}</textarea>
+                            <div class="flex items-center gap-2 mt-2">
+                                <button class="btn btn-primary btn-sm" id="goals-save">Save goals</button>
+                                <span class="text-secondary text-sm" id="goals-status"></span>
+                            </div>
+                        ` : ''}
+                    </div>
+
+                    <div class="howto-substep">
+                        <div class="howto-substep-label">iv. View the curated feed</div>
+                        <p class="text-secondary text-sm">
+                            Open <a href="#curated">AI Curation</a> — the freshly-filtered pack appears with per-post scores and reasons.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
+    _stepShip() {
+        return `
+            <div class="howto-step">
+                <div class="howto-step-num">4</div>
+                <div class="howto-step-body">
+                    <h3 class="font-semibold text-subtitle mb-2">Take it with you <span class="text-secondary text-sm">(optional)</span></h3>
+                    <p class="text-secondary text-sm">
+                        Right-click the pack folder in Finder → <em>Compress</em>. AirDrop the zip to your phone. Open the Focus Lab Feed viewer in Safari and import the zip.
+                        <br><br>
+                        The viewer is a single HTML file — it runs entirely in the browser, no server, no account. Scroll position is saved per pack, so you can pick up where you left off.
+                    </p>
+                </div>
+            </div>
+        `;
+    },
+
+    // ---- Helpers ----
+
     _packFullPath() {
         const ws = this.workspace && this.workspace.path || '';
-        if (!this.selectedPack) return ws;  // workspace root
+        if (!this.selectedPack) return ws;
         return `${ws}/exports/${this.selectedPack}`;
     },
 
-    _renderPackPicker() {
-        const packs = (this.workspace && this.workspace.recent_packs) || [];
-        const options = ['<option value="">Workspace root</option>']
-            .concat(packs.filter(p => p.is_dir).map(p =>
-                `<option value="${escapeAttr(p.name)}">${escapeHTML(p.name)}</option>`
-            ));
-        return `
-            <div class="card">
-                <h3 class="font-semibold text-subtitle mb-3">Pack to curate</h3>
-                <select id="pack-select" class="setup-input" style="width:100%">
-                    ${options.join('')}
-                </select>
-                ${packs.filter(p => p.is_dir).length === 0
-                    ? '<p class="text-secondary text-sm mt-2">No packs yet — go to <strong>Export</strong> and create one.</p>'
-                    : '<p class="text-secondary text-sm mt-2">Pick a pack to curate — the commands below will cd into it.</p>'
-                }
-            </div>
-        `;
-    },
-
-    _renderAgentPicker() {
-        return `
-            <div class="card">
-                <h3 class="font-semibold text-subtitle mb-3">Your agent</h3>
-                <div class="agent-grid">
-                    ${this.agents.map(a => `
-                        <button class="agent-card ${a.id === this.selectedAgent ? 'selected' : ''}"
-                                data-agent-id="${a.id}">
-                            <div class="agent-name">${a.name}</div>
-                            <div class="agent-tagline">${a.tagline}</div>
-                        </button>
-                    `).join('')}
-                </div>
-                <div class="agent-setup text-secondary text-sm mt-3">
-                    ${this.agents.find(a => a.id === this.selectedAgent).setup}
-                </div>
-            </div>
-        `;
-    },
-
-    _renderCommands() {
-        const agent = this.agents.find(a => a.id === this.selectedAgent);
-        const path = this._packFullPath();
-        const launch = agent.launchCmd(path);
-        const prompt = agent.prompt(path);
-
-        return `
-            <div class="card" id="commands-card">
-                <h3 class="font-semibold text-subtitle mb-3">Launch</h3>
-                <p class="text-secondary text-sm mb-2">Run this in your terminal:</p>
-                <div class="code-block-wrap">
-                    <pre class="code-block" id="launch-code">${escapeHTML(launch)}</pre>
-                    <button class="copy-btn" data-copy-target="launch-code">Copy</button>
-                </div>
-
-                <h3 class="font-semibold text-subtitle mb-3 mt-4">Prompt</h3>
-                <p class="text-secondary text-sm mb-2">Then paste this to your agent:</p>
-                <div class="code-block-wrap">
-                    <pre class="code-block" id="prompt-code">${escapeHTML(prompt)}</pre>
-                    <button class="copy-btn" data-copy-target="prompt-code">Copy</button>
-                </div>
-            </div>
-        `;
-    },
-
     _refreshCommands() {
-        const card = document.getElementById('commands-card');
-        if (!card) return;
         const agent = this.agents.find(a => a.id === this.selectedAgent);
         const path = this._packFullPath();
-        document.getElementById('launch-code').textContent = agent.launchCmd(path);
-        document.getElementById('prompt-code').textContent = agent.prompt(path);
-    },
-
-    _renderGoalsEditor() {
-        const content = (this.goals && this.goals.content) || '';
-        const exists = !!(this.goals && this.goals.exists);
-        return `
-            <div class="card">
-                <div class="flex items-center justify-between mb-3">
-                    <h3 class="font-semibold text-subtitle">Your goals</h3>
-                    <span class="text-secondary text-xs">
-                        ${exists ? 'Saved to <code>goals.md</code>' : 'Not yet saved'}
-                    </span>
-                </div>
-                <p class="text-secondary text-sm mb-2">
-                    These preferences drive how the curator scores your posts. The first time you run
-                    an agent in a pack, it\'ll also offer to interview you and write this for you.
-                </p>
-                <textarea id="goals-textarea" class="goals-textarea" rows="16" spellcheck="false">${escapeHTML(content)}</textarea>
-                <div class="flex items-center gap-2 mt-3">
-                    <button class="btn btn-primary" id="goals-save">Save goals</button>
-                    <span class="text-secondary text-sm" id="goals-status"></span>
-                </div>
-            </div>
-        `;
+        const l = document.getElementById('launch-code');
+        const p = document.getElementById('prompt-code');
+        if (l) l.textContent = agent.launchCmd(path);
+        if (p) p.textContent = agent.prompt(path);
     },
 
     async saveGoals() {
@@ -249,17 +324,14 @@ window.CuratePage = {
     },
 
     async _copyToClipboard(btn) {
-        const targetId = btn.dataset.copyTarget;
-        const target = document.getElementById(targetId);
+        const target = document.getElementById(btn.dataset.copyTarget);
         if (!target) return;
-        const text = target.textContent;
         try {
-            await navigator.clipboard.writeText(text);
+            await navigator.clipboard.writeText(target.textContent);
             const orig = btn.textContent;
             btn.textContent = 'Copied!';
             setTimeout(() => { btn.textContent = orig; }, 1500);
         } catch (e) {
-            // Fallback
             const range = document.createRange();
             range.selectNode(target);
             window.getSelection().removeAllRanges();
@@ -270,18 +342,14 @@ window.CuratePage = {
     },
 };
 
-// ----- helpers -----
+// helpers
 function quote(path) {
     if (!path) return '.';
     return path.includes(' ') ? `"${path}"` : path;
 }
-
-function escapeHTML(s) {
+function esc(s) {
     return String(s == null ? '' : s)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
 }
-
-function escapeAttr(s) {
-    return escapeHTML(s);
-}
+function escAttr(s) { return esc(s); }

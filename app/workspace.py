@@ -102,45 +102,69 @@ def _relative_path(target: Path, start: Path) -> Path:
         return target.resolve()
 
 
-def bootstrap_workspace(workspace: Path) -> dict:
+def bootstrap_workspace(workspace: Path, update_app_files: bool = False) -> dict:
     """Populate `workspace` with the curation structure. Idempotent.
 
-    Never overwrites existing files. Creates `exports/`, the curator skill, the
-    `.claude/skills/focus-lab-curator` symlink, a starter `goals.md`, plus
-    `CLAUDE.md` / `AGENTS.md` / `README.md` if they're absent.
+    Files split into two categories:
+
+    * **App-managed** — curator skill, CLAUDE.md, AGENTS.md, README.md, and
+      the `.claude/skills` symlink. These evolve with app versions. Created
+      when missing; refreshed to the current version when `update_app_files`
+      is True.
+    * **User-managed** — `goals.md` and `exports/`. Created when missing,
+      but NEVER overwritten regardless of flags — this is your data.
     """
     ws = Path(workspace).expanduser().resolve()
     ws.mkdir(parents=True, exist_ok=True)
     created: list[str] = []
+    updated: list[str] = []
 
+    # ---- user-managed ----
     exports = ws / "exports"
     if not exports.exists():
         exports.mkdir()
         created.append("exports/")
 
-    # Copy the curator skill if the workspace doesn't already have its own.
+    # ---- app-managed: curator skill ----
     src = skill_source_dir()
     dst = ws / "skills" / SKILL_NAME
-    if not dst.exists() and src.exists() and src.resolve() != dst.resolve():
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(src, dst)
-        created.append(f"skills/{SKILL_NAME}/")
+    same_dir = src.exists() and src.resolve() == dst.resolve()
+    if src.exists() and not same_dir:
+        if not dst.exists():
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(src, dst)
+            created.append(f"skills/{SKILL_NAME}/")
+        elif update_app_files:
+            shutil.rmtree(dst)
+            shutil.copytree(src, dst)
+            updated.append(f"skills/{SKILL_NAME}/")
 
-    # .claude/skills symlink — makes the skill auto-discoverable whether the
-    # user runs `claude` in the workspace root or a pack subdirectory.
+    # ---- app-managed: .claude/skills symlink ----
     claude_skill_link = ws / ".claude" / "skills" / SKILL_NAME
     skill_for_link = dst if dst.exists() else src
-    if skill_for_link.exists() and not claude_skill_link.exists() and not claude_skill_link.is_symlink():
-        claude_skill_link.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            rel = _relative_path(skill_for_link, claude_skill_link.parent)
-            claude_skill_link.symlink_to(rel)
-            created.append(".claude/skills/focus-lab-curator (symlink)")
-        except OSError:
-            shutil.copytree(skill_for_link, claude_skill_link)
-            created.append(".claude/skills/focus-lab-curator (copy)")
+    link_exists = claude_skill_link.exists() or claude_skill_link.is_symlink()
+    if skill_for_link.exists():
+        if not link_exists:
+            claude_skill_link.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                rel = _relative_path(skill_for_link, claude_skill_link.parent)
+                claude_skill_link.symlink_to(rel)
+                created.append(".claude/skills/focus-lab-curator (symlink)")
+            except OSError:
+                shutil.copytree(skill_for_link, claude_skill_link)
+                created.append(".claude/skills/focus-lab-curator (copy)")
+        elif update_app_files and not claude_skill_link.is_symlink():
+            # Stale copy — replace with fresh symlink.
+            shutil.rmtree(claude_skill_link)
+            try:
+                rel = _relative_path(skill_for_link, claude_skill_link.parent)
+                claude_skill_link.symlink_to(rel)
+                updated.append(".claude/skills/focus-lab-curator (symlink)")
+            except OSError:
+                shutil.copytree(skill_for_link, claude_skill_link)
+                updated.append(".claude/skills/focus-lab-curator (copy)")
 
-    # Seed goals.md from the template.
+    # ---- user-managed: goals.md — create if missing, NEVER overwrite ----
     goals_dst = ws / "goals.md"
     if not goals_dst.exists():
         template = skill_for_link / "templates" / "goals.md"
@@ -148,14 +172,17 @@ def bootstrap_workspace(workspace: Path) -> dict:
             shutil.copy2(template, goals_dst)
             created.append("goals.md")
 
-    # Docs — only if missing (never clobber).
+    # ---- app-managed: docs ----
     for rel, content in (("CLAUDE.md", CLAUDE_MD), ("AGENTS.md", AGENTS_MD), ("README.md", README_MD)):
         target = ws / rel
         if not target.exists():
             target.write_text(content)
             created.append(rel)
+        elif update_app_files and target.read_text() != content:
+            target.write_text(content)
+            updated.append(rel)
 
-    return {"workspace": str(ws), "created": created}
+    return {"workspace": str(ws), "created": created, "updated": updated}
 
 
 def save_workspace_dir(workspace: Path) -> None:

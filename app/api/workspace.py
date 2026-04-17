@@ -58,11 +58,17 @@ async def get_workspace():
 
 class SetupRequest(BaseModel):
     path: str
+    update_app_files: bool = False  # refresh skill + docs if already present
 
 
 @router.post("/setup")
 async def setup(request: SetupRequest):
-    """Create (if missing) and bootstrap the user's chosen workspace folder."""
+    """Create (if missing) and bootstrap the user's chosen workspace folder.
+
+    If the folder already has a workspace, `goals.md` is never overwritten.
+    App-managed files (the curator skill, CLAUDE.md, AGENTS.md, README.md)
+    are only refreshed when `update_app_files` is True.
+    """
     raw = request.path.strip() if request.path else ""
     if not raw:
         raise HTTPException(400, "A folder path is required.")
@@ -76,7 +82,7 @@ async def setup(request: SetupRequest):
         raise HTTPException(400, f"{target} exists and is not a directory.")
 
     target.mkdir(parents=True, exist_ok=True)
-    result = bootstrap_workspace(target)
+    result = bootstrap_workspace(target, update_app_files=request.update_app_files)
     save_workspace_dir(target)
     return {"success": True, **result}
 
