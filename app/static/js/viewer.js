@@ -18,7 +18,7 @@ window.ViewerPage = {
         return `
             <div class="fade-in">
                 <div class="page-header">
-                    <h1 class="page-title">Viewer</h1>
+                    <h1 class="page-title">Raw Feed</h1>
                     <select id="run-selector" onchange="ViewerPage.onRunSelect(this.value)">
                         <option value="latest">Latest runs</option>
                     </select>

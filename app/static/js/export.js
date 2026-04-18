@@ -166,7 +166,7 @@ window.ExportPage = {
             });
             if (r.success) {
                 await this.refreshWorkspace();
-                if (window.App && App.refreshWorkspaceChip) App.refreshWorkspaceChip();
+                window.dispatchEvent(new CustomEvent("workspace:updated"));
                 const parts = [];
                 if (r.created && r.created.length) parts.push(`${r.created.length} created`);
                 if (r.updated && r.updated.length) parts.push(`${r.updated.length} updated`);
@@ -202,7 +202,7 @@ window.ExportPage = {
                 body: JSON.stringify({ path: next }),
             });
             await this.refreshWorkspace();
-            if (window.App && App.refreshWorkspaceChip) App.refreshWorkspaceChip();
+            window.dispatchEvent(new CustomEvent("workspace:updated"));
         } catch (e) {
             alert('Could not change workspace: ' + e.message);
         }
@@ -332,7 +332,7 @@ window.ExportPage = {
                     try { await api('/workspace/reveal', { method: 'POST', body: JSON.stringify({ path: r.path }) }); }
                     catch (err) { console.warn('Reveal failed:', err); }
                 });
-                if (window.App && App.refreshWorkspaceChip) App.refreshWorkspaceChip();
+                window.dispatchEvent(new CustomEvent("workspace:updated"));
             }
         } catch (e) {
             alert('Curation export failed: ' + e.message);

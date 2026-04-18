@@ -22,8 +22,10 @@ pip install pyinstaller pywebview 2>&1 | tail -1
 echo "[build] Installing app dependencies..."
 pip install -r requirements.txt -r requirements-app.txt 2>&1 | tail -1
 
-# Clean previous builds
+# Clean previous builds. Two passes because Finder re-creates .DS_Store files
+# between deletes if the folder is open in any Finder window.
 echo "[build] Cleaning previous builds..."
+rm -rf build/ dist/ 2>/dev/null || true
 rm -rf build/ dist/
 
 # Run PyInstaller

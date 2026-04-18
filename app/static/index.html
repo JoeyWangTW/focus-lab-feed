@@ -7,7 +7,18 @@
     <link rel="icon" type="image/svg+xml" href="/focuslab-logo.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        // Apply saved theme before paint to avoid a light→dark flash.
+        (function () {
+            try {
+                var stored = localStorage.getItem('focuslab:theme');
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var dark = stored === 'dark' || (!stored && prefersDark);
+                if (dark) document.documentElement.classList.add('dark');
+            } catch (e) {}
+        })();
+    </script>
     <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
@@ -60,7 +71,18 @@
                 Instructions
             </a>
             <div class="workspace-chip" id="workspace-chip">
-                <div class="workspace-label">Workspace</div>
+                <div class="workspace-label-row">
+                    <span class="workspace-label">Workspace</span>
+                    <button class="theme-toggle" id="theme-toggle" title="Toggle theme" aria-label="Toggle theme">
+                        <svg class="theme-icon theme-icon-sun" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="4"/>
+                            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+                        </svg>
+                        <svg class="theme-icon theme-icon-moon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                        </svg>
+                    </button>
+                </div>
                 <div class="workspace-path" id="workspace-path" title="">Loading…</div>
                 <button class="workspace-open" id="workspace-open-btn">Open folder</button>
             </div>

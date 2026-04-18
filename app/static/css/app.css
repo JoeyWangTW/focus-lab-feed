@@ -1,41 +1,61 @@
 /* ============================================================
-   Focus Lab Feed Collector — Design System
+   Focus Lab Feed — Design System
+   Tokens derived from focus-lab-landing to keep cross-surface parity.
+   Light is the default; `.dark` on :root flips to the dark palette.
    ============================================================ */
 
 /* --- Reset --- */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
-/* --- Tokens --- */
+/* --- Design-system tokens (LIGHT) --- */
 :root {
-    /* Backgrounds */
-    --bg-primary: #09090b;
-    --bg-secondary: #0f0f11;
-    --bg-card: #18181b;
-    --bg-elevated: #1e1e22;
-    --bg-hover: rgba(255, 255, 255, 0.04);
+    /* Canonical tokens — mirror the landing site */
+    --background:             #ffffff;
+    --foreground:             #09090b;
+    --primary:                #18181b;
+    --primary-foreground:     #fafafa;
+    --secondary:              #f4f4f5;
+    --secondary-foreground:   #18181b;
+    --muted:                  #f4f4f5;
+    --muted-foreground:       #71717a;
+    --accent:                 #636B2F;   /* olive */
+    --accent-foreground:      #ffffff;
+    --destructive:            #ef4444;
+    --destructive-foreground: #fafafa;
+    --border:                 #e4e4e7;
+    --input:                  #e4e4e7;
+    --ring:                   #18181b;
+    --card:                   #ffffff;
+    --card-foreground:        #09090b;
+    --elevated:               #fafafa;
 
-    /* Text */
-    --text-primary: #fafafa;
-    --text-secondary: #71717a;
-    --text-muted: #52525b;
+    /* Surface alpha overlays (theme-aware hover/active fills) */
+    --hover-alpha:  rgba(0, 0, 0, 0.04);
+    --active-alpha: rgba(0, 0, 0, 0.08);
 
-    /* Accent — muted teal */
-    --accent: #2dd4bf;
-    --accent-hover: #14b8a6;
-    --accent-subtle: rgba(45, 212, 191, 0.1);
-    --accent-text: #0a0a0b;
+    /* Accent-subtle (tinted callouts) */
+    --accent-subtle: rgba(99, 107, 47, 0.10);
+    --accent-hover:  #4f5524;
 
     /* Semantic */
-    --success: #22c55e;
-    --success-subtle: rgba(34, 197, 94, 0.12);
-    --danger: #ef4444;
-    --danger-subtle: rgba(239, 68, 68, 0.12);
-    --warning: #f59e0b;
-    --warning-subtle: rgba(245, 158, 11, 0.12);
+    --success:        #16a34a;
+    --success-subtle: rgba(22, 163, 74, 0.10);
+    --danger:         var(--destructive);
+    --danger-subtle:  rgba(239, 68, 68, 0.10);
+    --warning:        #d97706;
+    --warning-subtle: rgba(217, 119, 6, 0.10);
 
-    /* Borders */
-    --border: #27272a;
-    --border-subtle: #1c1c1f;
+    /* --- Legacy app-token aliases (so existing CSS keeps working) --- */
+    --bg-primary:     var(--background);
+    --bg-secondary:   var(--secondary);
+    --bg-card:        var(--card);
+    --bg-elevated:    var(--elevated);
+    --bg-hover:       var(--hover-alpha);
+    --text-primary:   var(--foreground);
+    --text-secondary: var(--muted-foreground);
+    --text-muted:     var(--muted-foreground);
+    --accent-text:    var(--accent-foreground);
+    --border-subtle:  var(--border);
 
     /* Radius */
     --radius-sm: 6px;
@@ -55,8 +75,9 @@
     --sp-12: 48px;
     --sp-16: 64px;
 
-    /* Typography */
-    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    /* Typography — Quicksand is the landing display face; mono kept for code */
+    --font-sans: 'Quicksand', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-display: 'Quicksand', var(--font-sans);
     --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
 
     --text-xs: 11px;
@@ -71,11 +92,47 @@
     --transition-fast: 0.1s ease;
     --transition: 0.18s ease;
 
-    /* Platform colors */
+    /* Platform colors (brand constants, not theme-dependent) */
     --color-twitter: #1da1f2;
-    --color-threads: #e7e9ea;
+    --color-threads: #71717a;
     --color-instagram: #e1306c;
-    --color-youtube: #ff4444;
+    --color-youtube: #ff0033;
+}
+
+/* --- DARK --- */
+:root.dark, .dark {
+    --background:             #111216;
+    --foreground:             #ededee;
+    --primary:                #fafafa;
+    --primary-foreground:     #18181b;
+    --secondary:              #1d1e22;
+    --secondary-foreground:   #ededee;
+    --muted:                  #1d1e22;
+    --muted-foreground:       #a1a1aa;
+    --accent:                 #BAC095;   /* sage */
+    --accent-foreground:      #18181b;
+    --destructive:            #7f1d1d;
+    --destructive-foreground: #fafafa;
+    --border:                 #2a2b30;
+    --input:                  #2a2b30;
+    --ring:                   #d4d4d8;
+    --card:                   #17181c;
+    --card-foreground:        #ededee;
+    --elevated:               #212227;
+
+    --hover-alpha:  rgba(255, 255, 255, 0.05);
+    --active-alpha: rgba(255, 255, 255, 0.09);
+
+    --accent-subtle: rgba(186, 192, 149, 0.12);
+    --accent-hover:  #cdd3a8;
+
+    --success:        #4ade80;
+    --success-subtle: rgba(74, 222, 128, 0.14);
+    --warning:        #facc15;
+    --warning-subtle: rgba(250, 204, 21, 0.14);
+
+    /* Threads icon still reads against dark panels */
+    --color-threads: #e7e9ea;
 }
 
 /* --- Base --- */
@@ -154,14 +211,42 @@ a:hover { color: var(--accent); }
     padding: var(--sp-4) var(--sp-5);
     border-top: 1px solid var(--border-subtle);
 }
+.workspace-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
 .workspace-label {
     font-size: 10px;
     font-weight: 600;
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    margin-bottom: 4px;
 }
+.theme-toggle {
+    background: none;
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-full);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all var(--transition);
+    padding: 0;
+}
+.theme-toggle:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+/* Show sun in dark mode (clicking will flip to light), moon in light mode. */
+.theme-icon { display: none; }
+.theme-icon-moon { display: inline-block; }
+.dark .theme-icon-moon { display: none; }
+.dark .theme-icon-sun  { display: inline-block; }
 .workspace-path {
     font-size: 12px;
     color: var(--text-primary);
@@ -668,14 +753,17 @@ a:hover { color: var(--accent); }
 .card-status-danger { border-left-color: var(--danger); }
 .card-status-muted { border-left-color: var(--text-secondary); }
 
-/* --- Buttons --- */
+/* --- Buttons — aligned to focus-lab-landing --- */
 .btn {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: var(--sp-2);
     padding: 10px 20px;
     border-radius: var(--radius);
-    border: none;
+    border: 1px solid transparent;
+    background: transparent;
+    color: inherit;
     font-family: var(--font-sans);
     font-size: var(--text-sm);
     font-weight: 500;
@@ -683,44 +771,81 @@ a:hover { color: var(--accent); }
     transition: all var(--transition);
     line-height: 1;
 }
+.btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+}
 
+/* Primary — strong neutral (flips black ⇄ white across themes). */
 .btn-primary {
-    background: var(--accent);
-    color: var(--accent-text);
+    background: var(--primary);
+    color: var(--primary-foreground);
 }
+.btn-primary:hover { opacity: 0.9; }
 
-.btn-primary:hover { background: var(--accent-hover); }
-
+/* Secondary — soft neutral fill. */
 .btn-secondary {
-    background: var(--bg-elevated);
-    color: var(--text-primary);
-    border: 1px solid var(--border);
+    background: var(--secondary);
+    color: var(--secondary-foreground);
+}
+.btn-secondary:hover { background: color-mix(in srgb, var(--secondary) 80%, var(--hover-alpha)); }
+
+/* Outline — transparent with border, hover flips to accent. */
+.btn-outline {
+    background: transparent;
+    color: var(--foreground);
+    border-color: var(--input);
+}
+.btn-outline:hover {
+    background: var(--accent);
+    color: var(--accent-foreground);
+    border-color: var(--accent);
 }
 
-.btn-secondary:hover { background: var(--bg-hover); border-color: var(--text-muted); }
-
+/* Ghost — text-only with hover emphasis. */
 .btn-ghost {
     background: transparent;
-    color: var(--text-secondary);
-    border: 1px solid transparent;
+    color: var(--muted-foreground);
 }
-
-.btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
+.btn-ghost:hover { color: var(--foreground); background: var(--hover-alpha); }
 .btn-ghost.active {
     background: var(--accent-subtle);
     color: var(--accent);
-    border-color: rgba(45, 212, 191, 0.2);
+    border-color: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
-.btn-danger {
-    background: var(--danger-subtle);
-    color: var(--danger);
-    border: 1px solid rgba(239, 68, 68, 0.2);
+/* Destructive — solid red. Use for confirm-delete primary actions. */
+.btn-destructive {
+    background: var(--destructive);
+    color: var(--destructive-foreground);
+}
+.btn-destructive:hover { opacity: 0.9; }
+.btn-destructive:focus-visible {
+    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--destructive);
 }
 
-.btn-danger:hover { background: rgba(239, 68, 68, 0.2); }
+/* Destructive outline — restrained red for Disconnect / Remove / Clear actions.
+   Hover fills the button so the stakes read clearly before you click. */
+.btn-danger,
+.btn-destructive-outline {
+    background: transparent;
+    color: var(--destructive);
+    border-color: color-mix(in srgb, var(--destructive) 40%, transparent);
+}
+.btn-danger:hover,
+.btn-destructive-outline:hover {
+    background: var(--destructive);
+    color: var(--destructive-foreground);
+    border-color: var(--destructive);
+}
+.btn-danger:focus-visible,
+.btn-destructive-outline:focus-visible {
+    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--destructive);
+}
 
-.btn-sm { padding: 6px 12px; font-size: 12px; }
+/* Sizes */
+.btn-sm { padding: 6px 14px; font-size: 12px; }
+.btn-lg { padding: 14px 28px; font-size: var(--text-md); }
 .btn-pill { border-radius: var(--radius-full); }
 
 .btn:disabled {
@@ -840,11 +965,7 @@ input[type="radio"] {
     border-bottom: 1px solid var(--border);
 }
 
-/* --- Platform Colors --- */
-.platform-twitter { border-left: 3px solid var(--color-twitter); }
-.platform-threads { border-left: 3px solid var(--color-threads); }
-.platform-instagram { border-left: 3px solid var(--color-instagram); }
-.platform-youtube { border-left: 3px solid var(--color-youtube); }
+/* Platform-colored left stripes removed — let the card style carry identity. */
 
 .platform-icon {
     font-size: 28px;

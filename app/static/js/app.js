@@ -28,6 +28,28 @@ const App = {
         // Populate workspace chip (runs once; refreshWorkspaceChip binds button handler)
         this.refreshWorkspaceChip();
 
+        // Any page can fire `workspace:updated` after a setup/change to force
+        // the sidebar chip to re-read /api/workspace. Cleaner than every call
+        // site remembering to poke App.refreshWorkspaceChip directly.
+        window.addEventListener('workspace:updated', () => this.refreshWorkspaceChip());
+
+        // Cmd/Ctrl+R inside pywebview doesn't reload by default — wire it up.
+        document.addEventListener('keydown', (e) => {
+            if ((e.metaKey || e.ctrlKey) && (e.key === 'r' || e.key === 'R')) {
+                e.preventDefault();
+                location.reload();
+            }
+        });
+
+        // Theme toggle — light ⇄ dark, persisted in localStorage.
+        const themeBtn = document.getElementById('theme-toggle');
+        if (themeBtn) {
+            themeBtn.addEventListener('click', () => {
+                const isDark = document.documentElement.classList.toggle('dark');
+                try { localStorage.setItem('focuslab:theme', isDark ? 'dark' : 'light'); } catch (e) {}
+            });
+        }
+
         // Nav click handlers
         document.querySelectorAll('.nav-item').forEach(item => {
             item.addEventListener('click', (e) => {
