@@ -128,6 +128,16 @@ def _viewer_html_source() -> Path | None:
     return candidate if candidate.exists() else None
 
 
+def _curate_script_source() -> Path | None:
+    """Locate the curator batching script to bundle into packs."""
+    if IS_BUNDLED and MEIPASS:
+        candidate = MEIPASS / "skills" / "focus-lab-curator" / "curate.py"
+        if candidate.exists():
+            return candidate
+    candidate = PROJECT_ROOT / "skills" / "focus-lab-curator" / "curate.py"
+    return candidate if candidate.exists() else None
+
+
 def _pack_readme(pack_name: str, post_count: int, media_count: int) -> str:
     return f"""# {pack_name}
 
@@ -135,15 +145,21 @@ A Focus Lab Feed pack: **{post_count} posts**, **{media_count} media files**.
 
 ## Curate this pack
 
-From this directory, run your agent (Claude Code / Cursor / Codex). The
-workspace-level Focus Lab Curator skill will detect `posts.json`, help you
-set up content preferences if you haven't already, and produce
-`posts.filtered.json` here.
+From this directory:
 
-Example (Claude Code):
+    python3 curate.py
 
-    claude
-    > curate this feed
+`curate.py` is a stdlib-only Python script that reads `posts.json` + `goals.md`,
+batches posts (default 20), and invokes `claude --print` per batch to score
+them. It writes `posts.filtered.json` with drop rules applied and an audit log.
+
+Options: `--batch 10` for smaller batches, `--model opus` for more careful scoring.
+
+### Or let your agent drive
+
+You can also run your agent (Claude Code / Cursor / Codex) in this directory
+and say "curate this feed" — the Focus Lab Curator skill will run the script
+for you, or score in-context for small packs.
 
 ## View on phone
 
@@ -216,6 +232,16 @@ async def export_curation(request: CurationExportRequest):
     viewer = _viewer_html_source()
     if viewer:
         shutil.copy2(viewer, pack_dir / "viewer.html")
+
+    # Bundle curate.py — the batching harness the skill invokes.
+    curate_script = _curate_script_source()
+    if curate_script:
+        dest_curate = pack_dir / "curate.py"
+        shutil.copy2(curate_script, dest_curate)
+        try:
+            dest_curate.chmod(0o755)
+        except OSError:
+            pass
 
     # Copy workspace goals.md if it exists (so the curator has something to start with).
     ws = get_workspace_dir()

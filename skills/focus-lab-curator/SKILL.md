@@ -17,17 +17,51 @@ You never collect, summarize, or paraphrase post content. You only score, drop, 
 
 ---
 
-## Tools to use (and tools to avoid)
+## How you do the work
 
-**Use your native file read/write tools.** Open `posts.json` and read it the same way you'd read any text file the user hands you. When you produce `posts.filtered.json`, write it with your built-in Write tool — **one file, one operation**. Do not stream, chunk, or append.
+Packs often hold 100s of posts. Holding all of them in context and emitting one giant `posts.filtered.json` tends to truncate or drift as the array grows — so this skill ships a tiny batching harness that does the mechanical chunking for you. **You don't write scoring code. You either run the provided script, or you do a small pack in-context.**
 
-**For ad-hoc JSON inspection**, prefer `jq` if you want to slice the file (`jq '.posts | length'`, `jq '.posts[0]'`). `jq` is on every Mac with Homebrew — but if it's missing, just read the file directly.
+### Default path: run `curate.py`
 
-**Do not write Python scripts, shell loops, or Node programs** to process the JSON. The user's Python env may be missing deps, on the wrong version, or not activated; every code path you add is a fresh thing that can fail and leave the pack half-curated. Scoring is *your* reasoning, not a script's. For the output, hold the full kept array in your context and write it in a single Write call.
+Every exported pack ships with `curate.py` in its root. From inside the pack:
 
-**Do not install anything.** No `pip install`, `npm install`, `brew install`. If a tool isn't already present, work without it.
+```bash
+python3 curate.py
+```
 
-**Zip only with the system `zip`** (see § Offer to zip at the end). No Python `zipfile`, no Node.
+That's it. The script:
+
+- Reads `posts.json` and `goals.md` from the current directory
+- Chunks posts into batches of 20
+- **Auto-detects an agent CLI** (`claude` → `codex` → `cursor-agent`, in that order) and calls it per batch with the scoring rubric inlined. Override with `--cli claude|codex|cursor-agent`.
+- Assembles `posts.filtered.json` with drop rules applied and the audit log filled in
+- Prints `batch N/M...` to stderr so the user sees progress
+
+When the user asks to curate, your job is to:
+1. Check `goals.md` exists (if not → run the Bootstrap flow first, then continue)
+2. Run `python3 curate.py` via your `Bash` tool from the pack directory
+3. Surface the script's stderr progress to the user
+4. When it finishes, report the kept/dropped counts and what to do next (zip + AirDrop)
+
+Pass-through flags when useful: `--batch 10` for smaller batches, `--model <name>` for a specific model, `--cli <name>` to force one backend.
+
+### Fallback path: in-context scoring (small packs only, or no CLI available)
+
+Only use this when either:
+- The pack has fewer than ~50 posts (fits cleanly in one response), **or**
+- None of `claude` / `codex` / `cursor-agent` are installed (the script will tell you which)
+
+Steps:
+1. `Read` `goals.md` and `posts.json`
+2. Score each post in your response using the rubric below (§ Scoring rubric)
+3. `Write` the full `posts.filtered.json` in a single Write call
+
+### Rules for both paths
+
+- **Never install anything.** No `pip install`, `npm install`, `brew install`, no package managers. If `claude` CLI is missing, use the fallback path.
+- **Never write your own scoring script.** `curate.py` already exists; don't duplicate it.
+- **Never write intermediate files** like `scored_batch_1.json`. The script writes once at the end; the fallback writes once.
+- **`goals.md` is user-owned.** Never touch it except during the Bootstrap flow.
 
 ---
 
