@@ -87,6 +87,43 @@ async def setup(request: SetupRequest):
     return {"success": True, **result}
 
 
+@router.get("/auto-export")
+async def get_auto_export():
+    """Return whether auto-export after collection is enabled."""
+    import json
+    from app.paths import CONFIG_PATH
+    enabled = False
+    if CONFIG_PATH.exists():
+        try:
+            enabled = bool(json.loads(CONFIG_PATH.read_text()).get("auto_export"))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {"enabled": enabled}
+
+
+class AutoExportRequest(BaseModel):
+    enabled: bool
+
+
+@router.post("/auto-export")
+async def set_auto_export(request: AutoExportRequest):
+    """Toggle auto-export. When true, every completed collection triggers a
+    curation export into `<workspace>/exports/`."""
+    import json
+    from app.paths import CONFIG_PATH
+
+    cfg: dict = {}
+    if CONFIG_PATH.exists():
+        try:
+            cfg = json.loads(CONFIG_PATH.read_text())
+        except (json.JSONDecodeError, OSError):
+            cfg = {}
+    cfg["auto_export"] = bool(request.enabled)
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
+    return {"success": True, "enabled": cfg["auto_export"]}
+
+
 @router.get("/goals")
 async def get_goals():
     ws = get_workspace_dir()

@@ -167,20 +167,10 @@ window.CuratedPage = {
             ` : ''}
         `;
 
-        // Set up video autoplay (local — ViewerPage's is scoped to #viewer-feed).
+        // Video autoplay + carousel drag — same observers both pages use.
         if (this._videoObserver) this._videoObserver.disconnect();
-        const videos = document.querySelectorAll('#curated-feed video');
-        if (videos.length) {
-            this._videoObserver = new IntersectionObserver((entries) => {
-                for (const entry of entries) {
-                    if (entry.isIntersecting) entry.target.play().catch(() => {});
-                    else entry.target.pause();
-                }
-            }, { threshold: 0.5 });
-            videos.forEach(v => this._videoObserver.observe(v));
-        }
-        // Carousel drag — borrow (class-based, not id-based).
-        if (window.ViewerPage && ViewerPage.setupCarouselDrag) ViewerPage.setupCarouselDrag();
+        this._videoObserver = PostRenderer.setupVideoAutoplay('curated-feed');
+        PostRenderer.setupCarouselDrag();
 
         this.applyCategoryFilter();
     },
@@ -212,124 +202,36 @@ window.CuratedPage = {
     // share one visual language. Curator-specific bits (score pill, category
     // badge, filter_reason) are layered on top.
     renderPost(post) {
-        const V = window.ViewerPage;  // reuse helpers
-        const platform = post.platform || 'twitter';
-        const plinks = (V && V.PLATFORM_LINKS[platform]) || null;
-        const authorDisplay = esc(post.author_name || post.author_handle || 'Unknown');
-        const handleDisplay = post.author_handle
-            ? `<span class="post-handle">${plinks ? `<a href="${plinks.mention(post.author_handle)}" target="_blank" rel="noopener">@${esc(post.author_handle)}</a>` : '@' + esc(post.author_handle)}</span>`
-            : '';
-        const postId = esc(post.id || Math.random().toString(36).slice(2));
+        const postId = String(post.id || Math.random().toString(36).slice(2));
 
-        // Score pill + category badge — placed top-right of post header.
+        // Curator-specific extras layered onto the shared PostRenderer.
         const scoreHtml = typeof post.score === 'number'
             ? `<span class="score-pill score-${scoreBucket(post.score)}">${post.score}</span>` : '';
         const categoryHtml = post.category
-            ? `<span class="badge badge-${escAttr(post.category)}">${esc(post.category)}</span>` : '';
-
-        // Filter reason — hidden by default; toggled from a button in the stats row.
-        const reasonBody = post.filter_reason
-            ? `<div class="filter-reason hidden" id="reason-${postId}">${esc(post.filter_reason)}</div>` : '';
+            ? `<span class="badge badge-${esc(post.category)}">${esc(post.category)}</span>` : '';
         const reasonToggle = post.filter_reason
             ? `<button class="reason-toggle" onclick="CuratedPage.toggleReason('${postId}', this)">why</button>` : '';
+        const reasonBody = post.filter_reason
+            ? `<div class="filter-reason hidden" id="reason-${postId}">${esc(post.filter_reason)}</div>` : '';
 
-        // Body with read-more (borrow Viewer's implementation).
-        const bodyHtml = V && V.renderPostBody
-            ? V.renderPostBody(post.text, platform, postId)
-            : `<div class="post-body">${esc(post.text || '')}</div>`;
-
-        // Media resolution — pack-scoped URLs.
         const packName = this.selectedPack ? this.selectedPack.name : '';
-        const mediaHtml = renderMedia(post, packName);
+        const mediaResolver = (path) => packName
+            ? `/api/curated/packs/${encodeURIComponent(packName)}/${path}`
+            : path;
 
-        // Repost + ad badges + quoted post — match Viewer's conventions.
-        const repostBadge = post.is_repost
-            ? `<div class="repost-label">${platform === 'twitter' ? 'Retweeted' : 'Reposted'} by @${esc(post.original_author || 'unknown')}</div>` : '';
-        const adBadge = post.is_ad ? '<span class="badge-ad">Ad</span>' : '';
-        const showPlatformBadge = true;  // always show on curated (since feed mixes platforms)
-
-        let quotedHtml = '';
-        if (post.quoted_post) {
-            const qp = post.quoted_post;
-            const qpLinks = plinks;
-            quotedHtml = `<div class="quoted-post">
-                <div class="quoted-post-header">
-                    <span class="font-semibold text-sm">${esc(qp.author_name || qp.author_handle || 'Unknown')}</span>
-                    ${qp.author_handle ? `<span class="post-handle text-xs">${qpLinks ? `<a href="${qpLinks.mention(qp.author_handle)}" target="_blank" rel="noopener">@${esc(qp.author_handle)}</a>` : '@' + esc(qp.author_handle)}</span>` : ''}
-                </div>
-                ${qp.text ? `<div class="text-sm" style="line-height:1.4;margin-top:4px">${V && V.formatText ? V.formatText(qp.text, platform) : esc(qp.text)}</div>` : ''}
-            </div>`;
-        }
-
-        const repostLabel = platform === 'twitter' ? 'RT' : 'reposts';
-        const timeAgo = V && V.timeAgo ? V.timeAgo(post.created_at) : (post.created_at || '');
-        const fmtNum = V && V.fmtNum ? V.fmtNum.bind(V) : (n => String(n || 0));
-
-        return `<div class="post" data-category="${escAttr(post.category || 'neutral')}" data-id="${postId}">
-            ${repostBadge}
-            <div class="post-header">
-                <div>
-                    ${adBadge}
-                    ${showPlatformBadge ? `<span class="badge badge-${platform} mr-2">${platform}</span>` : ''}
-                    <span class="post-author">${authorDisplay}</span>
-                    ${handleDisplay}
-                </div>
-                <span class="post-time">
-                    ${categoryHtml}
-                    ${scoreHtml}
-                    ${post.url ? `<a href="${escAttr(post.url)}" target="_blank" rel="noopener">${timeAgo}</a>` : timeAgo}
-                </span>
-            </div>
-            ${bodyHtml}
-            ${mediaHtml}
-            ${quotedHtml}
-            <div class="post-stats">
-                <span>replies ${fmtNum(post.replies)}</span>
-                <span>${repostLabel} ${fmtNum(post.reposts)}</span>
-                <span>likes ${fmtNum(post.likes)}</span>
-                ${post.quotes ? `<span>quotes ${fmtNum(post.quotes)}</span>` : ''}
-                ${reasonToggle}
-            </div>
-            ${reasonBody}
-        </div>`;
+        return PostRenderer.renderPost(post, {
+            postId,
+            showPlatformBadge: true,
+            mediaResolver,
+            headerExtras: `${categoryHtml}${scoreHtml}`,
+            statsExtras: reasonToggle,
+            afterStats: reasonBody,
+            dataAttrs: { category: post.category || 'neutral' },
+        });
     },
 };
 
 // ---- helpers ----
-
-function renderMedia(post, packName) {
-    const paths = post.local_media_paths || [];
-    const fallbacks = [...(post.media_urls || []), ...(post.video_urls || [])];
-    const count = Math.max(paths.length, fallbacks.length);
-    if (count === 0) return '';
-
-    const base = packName ? `/api/curated/packs/${encodeURIComponent(packName)}/` : '';
-    const resolve = (path, fallback) => {
-        if (path && path.startsWith('media/')) return base + path;
-        return fallback || path || '';
-    };
-
-    if (count === 1) {
-        const src = resolve(paths[0], fallbacks[0]);
-        return `<div class="post-media">${mediaElement(src, paths[0])}</div>`;
-    }
-
-    // Carousel — matches Viewer's .post-carousel .post-carousel-item classes.
-    const slides = [];
-    for (let i = 0; i < count; i++) {
-        const src = resolve(paths[i], fallbacks[i]);
-        slides.push(`<div class="post-carousel-item">${mediaElement(src, paths[i])}<span class="post-carousel-badge">${i + 1}/${count}</span></div>`);
-    }
-    return `<div class="post-carousel viewer-carousel">${slides.join('')}</div>`;
-}
-
-function mediaElement(src, hintPath) {
-    if (!src) return '<div class="empty-state">Media unavailable</div>';
-    const lower = (hintPath || src).toLowerCase();
-    const isVideo = /\.(mp4|mov|m4v|webm)(\?|$)/.test(lower) || lower.includes('_v0') || lower.includes('_v1');
-    if (isVideo) return `<video src="${escAttr(src)}" muted loop preload="metadata" controls></video>`;
-    return `<img src="${escAttr(src)}" loading="lazy" onclick="ViewerPage.openLightbox && ViewerPage.openLightbox(this.src)">`;
-}
 
 function scoreBucket(n) {
     if (n >= 80) return 'high';

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -67,6 +68,39 @@ async def _run_collection(task, platform: str, config: dict):
         print(f"[collection:{platform}] Failed: {e}")
 
 
+async def _maybe_auto_export(job_id: str, tasks: list[asyncio.Task]):
+    """Coordinator: after all platforms in this job finish, run a curation
+    export if `config.auto_export` is enabled. Fire-and-forget from /start."""
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+    cfg = _load_config()
+    if not cfg.get("auto_export"):
+        return
+
+    # Resolve run_ids for every platform in this job that produced posts.json.
+    today = datetime.now().strftime("%Y-%m-%d")
+    job_dir = FEED_DATA_DIR / today / f"job_{job_id}"
+    if not job_dir.exists():
+        return
+    run_ids = [
+        f"{today}/job_{job_id}/{p.name}"
+        for p in job_dir.iterdir()
+        if p.is_dir() and (p / "posts.json").exists()
+    ]
+    if not run_ids:
+        return
+
+    # Call the curation export endpoint in-process so we reuse its logic
+    # (media copy, goals.md bundling, viewer.html, curate.py, README).
+    try:
+        from app.api.export import CurationExportRequest, export_curation
+        result = await export_curation(CurationExportRequest(run_ids=run_ids))
+        print(f"[auto-export] job {job_id}: wrote {result.get('path')} "
+              f"({result.get('post_count')} posts, {result.get('media_count')} media)")
+    except Exception as e:
+        print(f"[auto-export] job {job_id} failed: {e}")
+
+
 @router.post("/start")
 async def start_collection(request: CollectionRequest):
     config = _load_config()
@@ -74,6 +108,7 @@ async def start_collection(request: CollectionRequest):
     job_id = create_job_id()
     config["_job_id"] = job_id
     started = []
+    spawned_tasks: list[asyncio.Task] = []
 
     for platform in request.platforms:
         if platform not in PLATFORMS:
@@ -88,7 +123,12 @@ async def start_collection(request: CollectionRequest):
             task.progress["max_posts_override"] = request.max_posts
 
         task._asyncio_task = asyncio.create_task(_run_collection(task, platform, config))
+        spawned_tasks.append(task._asyncio_task)
         started.append({"platform": platform, "task_id": task.task_id, "status": "started"})
+
+    # Fire-and-forget coordinator — auto-export once all platforms finish.
+    if spawned_tasks:
+        asyncio.create_task(_maybe_auto_export(job_id, spawned_tasks))
 
     return {"tasks": started, "job_id": job_id}
 
@@ -109,6 +149,9 @@ async def start_single_collection(platform: str, max_posts: int | None = None, j
         task.progress["max_posts_override"] = max_posts
 
     task._asyncio_task = asyncio.create_task(_run_collection(task, platform, config))
+
+    # Fire-and-forget auto-export coordinator (no-op unless config.auto_export).
+    asyncio.create_task(_maybe_auto_export(config["_job_id"], [task._asyncio_task]))
 
     return {"task_id": task.task_id, "status": task.status, "platform": platform, "job_id": config["_job_id"]}
 

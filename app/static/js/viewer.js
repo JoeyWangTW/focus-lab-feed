@@ -1,18 +1,16 @@
 /**
- * Viewer Page — feed viewer ported from viewer.html
+ * Feed (raw) page — lists collected posts in timeline order.
+ *
+ * All post rendering, media, carousel drag, and video autoplay come from
+ * PostRenderer — see app/static/js/post-renderer.js. This file owns only
+ * the Feed-specific bits: run selector, platform tabs, sort controls,
+ * replies toggle.
  */
 window.ViewerPage = {
     allPosts: [],
     currentSort: 'time',
     currentPlatform: 'all',
     availableRuns: [],
-
-    PLATFORM_LINKS: {
-        twitter:   { mention: h => `https://x.com/${h}`, hashtag: h => `https://x.com/hashtag/${h}` },
-        threads:   { mention: h => `https://threads.net/@${h}`, hashtag: h => `https://threads.net/search?q=%23${h}` },
-        instagram: { mention: h => `https://instagram.com/${h}`, hashtag: h => `https://instagram.com/explore/tags/${h}` },
-        youtube:   { mention: h => `https://youtube.com/@${h}`, hashtag: h => `https://youtube.com/results?search_query=%23${h}` },
-    },
 
     render() {
         return `
@@ -164,29 +162,6 @@ window.ViewerPage = {
         this.renderPosts();
     },
 
-    renderPostBody(text, platform, postId) {
-        const TRUNCATE_LEN = 300;
-        const formatted = this.formatText(text, platform);
-        if (!text || text.length <= TRUNCATE_LEN) {
-            return `<div class="post-body">${formatted}</div>`;
-        }
-        // Truncate at word boundary
-        const truncated = text.substring(0, TRUNCATE_LEN).replace(/\s+\S*$/, '');
-        const truncatedFormatted = this.formatText(truncated, platform);
-        return `<div class="post-body">
-            <span id="post-short-${postId}">${truncatedFormatted}… <button class="read-more-btn" onclick="ViewerPage.toggleReadMore('${postId}')">Read more</button></span>
-            <span id="post-full-${postId}" class="hidden">${formatted} <button class="read-more-btn" onclick="ViewerPage.toggleReadMore('${postId}')">Show less</button></span>
-        </div>`;
-    },
-
-    toggleReadMore(postId) {
-        const short = document.getElementById(`post-short-${postId}`);
-        const full = document.getElementById(`post-full-${postId}`);
-        if (!short || !full) return;
-        short.classList.toggle('hidden');
-        full.classList.toggle('hidden');
-    },
-
     getFilteredPosts() {
         if (this.currentPlatform === 'all') return this.allPosts;
         return this.allPosts.filter(p => p.platform === this.currentPlatform);
@@ -199,39 +174,6 @@ window.ViewerPage = {
         const platforms = [...new Set(posts.map(p => p.platform))].join(', ');
         document.getElementById('viewer-meta').textContent =
             `${posts.length} posts | ${imgCount} images, ${vidCount} videos | ${platforms}`;
-    },
-
-    formatText(text, platform) {
-        const links = this.PLATFORM_LINKS[platform] || this.PLATFORM_LINKS.twitter;
-        return (text || '')
-            .replace(/&amp;/g, '&')
-            .replace(/(https?:\/\/t\.co\/\S+)/g, '')
-            .replace(/(https?:\/\/\S+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
-            .replace(/@(\w+)/g, (_, h) => `<a href="${links.mention(h)}" target="_blank" rel="noopener">@${h}</a>`)
-            .replace(/#(\w+)/g, (_, h) => `<a href="${links.hashtag(h)}" target="_blank" rel="noopener">#${h}</a>`)
-            .trim();
-    },
-
-    timeAgo(dateStr) {
-        if (!dateStr) return '';
-        // YouTube returns relative strings like "3 years ago" — pass through as-is
-        if (/\d+\s+(second|minute|hour|day|week|month|year)s?\s+ago/i.test(dateStr)) return dateStr;
-        // Also handle "Streamed X ago", "Updated X ago" etc.
-        if (/ago$/i.test(dateStr)) return dateStr;
-        const d = new Date(dateStr);
-        if (isNaN(d.getTime())) return dateStr; // fallback: show raw text rather than "Invalid Date"
-        const diff = (Date.now() - d) / 1000;
-        if (diff < 60) return `${Math.floor(diff)}s`;
-        if (diff < 3600) return `${Math.floor(diff/60)}m`;
-        if (diff < 86400) return `${Math.floor(diff/3600)}h`;
-        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    },
-
-    fmtNum(n) {
-        n = n || 0;
-        if (n >= 1000000) return (n/1000000).toFixed(1) + 'M';
-        if (n >= 1000) return (n/1000).toFixed(1) + 'K';
-        return n.toString();
     },
 
     sortPosts(posts, sort) {
@@ -255,83 +197,15 @@ window.ViewerPage = {
             return;
         }
 
+        const multiPlatform = this.currentPlatform === 'all'
+            && new Set(this.allPosts.map(p => p.platform)).size > 1;
+
         feed.innerHTML = sorted.map(t => {
+            const postId = (t.id || Math.random().toString(36).slice(2)).toString();
             const platform = t.platform || 'twitter';
-            const plinks = this.PLATFORM_LINKS[platform] || this.PLATFORM_LINKS.twitter;
-            const authorDisplay = t.author_name || t.author_handle || 'Unknown';
-            const handleDisplay = t.author_handle
-                ? `<span class="post-handle"><a href="${plinks.mention(t.author_handle)}" target="_blank" rel="noopener">@${t.author_handle}</a></span>`
-                : '';
-            const showPlatformBadge = this.currentPlatform === 'all' && this.allPosts.some(p => p.platform !== platform);
-
-            let mediaHtml = '';
-            const pd = t.platform_data || {};
-            if (platform === 'youtube' && pd.embed_url) {
-                mediaHtml = `<div class="post-embed"><iframe src="${pd.embed_url}" allowfullscreen loading="lazy"></iframe></div>`;
-            } else {
-                const paths = (t.local_media_paths || []);
-                if (paths.length === 1) {
-                    const fullPath = paths[0].startsWith('feed_data/') ? '/' + paths[0] : '/feed_data/' + paths[0];
-                    if (paths[0].endsWith('.mp4')) {
-                        mediaHtml = `<div class="post-media"><video src="${fullPath}" muted loop preload="metadata" controls></video></div>`;
-                    } else {
-                        mediaHtml = `<div class="post-media"><img src="${fullPath}" loading="lazy" onclick="ViewerPage.openLightbox(this.src)"></div>`;
-                    }
-                } else if (paths.length >= 2) {
-                    const items = paths.map((p, idx) => {
-                        const fullPath = p.startsWith('feed_data/') ? '/' + p : '/feed_data/' + p;
-                        if (p.endsWith('.mp4')) {
-                            return `<div class="post-carousel-item"><video src="${fullPath}" muted loop preload="metadata" controls></video><span class="post-carousel-badge">${idx+1}/${paths.length}</span></div>`;
-                        } else {
-                            return `<div class="post-carousel-item"><img src="${fullPath}" loading="lazy" onclick="ViewerPage.openLightbox(this.src)"><span class="post-carousel-badge">${idx+1}/${paths.length}</span></div>`;
-                        }
-                    });
-                    mediaHtml = `<div class="post-carousel viewer-carousel">${items.join('')}</div>`;
-                }
-            }
-
-            const repostBadge = t.is_repost ? `<div class="repost-label">${platform === 'twitter' ? 'Retweeted' : 'Reposted'} by @${t.original_author || 'unknown'}</div>` : '';
-            const repostLabel = platform === 'twitter' ? 'RT' : 'reposts';
-            const adBadge = t.is_ad ? '<span class="badge-ad">Ad</span>' : '';
             const hasReplies = t.top_replies && t.top_replies.length > 0;
-            const postId = t.id || Math.random().toString(36).substr(2);
-            const shortBadge = pd.type === 'short' ? '<span class="badge-short">Short</span>' : '';
 
-            // Quoted/original post embed
-            let quotedHtml = '';
-            if (t.quoted_post) {
-                const qp = t.quoted_post;
-                const qpLinks = this.PLATFORM_LINKS[platform] || this.PLATFORM_LINKS.twitter;
-                quotedHtml = `<div class="quoted-post">
-                    <div class="quoted-post-header">
-                        <span class="font-semibold text-sm">${qp.author_name || qp.author_handle || 'Unknown'}</span>
-                        ${qp.author_handle ? `<span class="post-handle text-xs"><a href="${qpLinks.mention(qp.author_handle)}" target="_blank" rel="noopener">@${qp.author_handle}</a></span>` : ''}
-                    </div>
-                    ${qp.text ? `<div class="text-sm" style="line-height:1.4;margin-top:4px">${this.formatText(qp.text, platform)}</div>` : ''}
-                </div>`;
-            }
-
-            return `<div class="post">
-                ${repostBadge}
-                <div class="post-header">
-                    <div>
-                        ${adBadge}
-                        ${showPlatformBadge ? `<span class="badge badge-${platform} mr-2">${platform}</span>` : ''}
-                        <span class="post-author">${authorDisplay}</span>
-                        ${handleDisplay}${shortBadge}
-                    </div>
-                    <span class="post-time">${t.url ? `<a href="${t.url}" target="_blank" rel="noopener">${this.timeAgo(t.created_at)}</a>` : this.timeAgo(t.created_at)}</span>
-                </div>
-                ${this.renderPostBody(t.text, platform, postId)}
-                ${mediaHtml}
-                ${quotedHtml}
-                <div class="post-stats">
-                    <span>replies ${this.fmtNum(t.replies)}${hasReplies ? '<span class="has-replies"></span>' : ''}</span>
-                    <span>${repostLabel} ${this.fmtNum(t.reposts)}</span>
-                    <span>likes ${this.fmtNum(t.likes)}</span>
-                    ${t.quotes ? `<span>quotes ${this.fmtNum(t.quotes)}</span>` : ''}
-                </div>
-                ${hasReplies ? `
+            const repliesSection = hasReplies ? `
                 <button class="post-replies-toggle" onclick="ViewerPage.toggleReplies('${postId}',this)">Show ${t.top_replies.length} replies</button>
                 <div id="replies-${postId}" class="post-replies-section hidden">
                     ${t.top_replies.map(r => `
@@ -340,16 +214,23 @@ window.ViewerPage = {
                                 <span class="reply-author">${r.author_name || r.author_handle || 'Unknown'}</span>
                                 <span class="reply-handle">${r.author_handle ? `@${r.author_handle}` : ''}</span>
                             </div>
-                            <div class="reply-body">${this.formatText(r.text, platform)}</div>
-                            <div class="reply-stats">${this.fmtNum(r.likes)} likes</div>
+                            <div class="reply-body">${PostRenderer.formatText(r.text, platform)}</div>
+                            <div class="reply-stats">${PostRenderer.fmtNum(r.likes)} likes</div>
                         </div>
                     `).join('')}
-                </div>` : ''}
-            </div>`;
+                </div>` : '';
+
+            return PostRenderer.renderPost(t, {
+                postId,
+                showPlatformBadge: multiPlatform,
+                // feed_data paths: prepend `/feed_data/` (or `/` if already prefixed)
+                mediaResolver: p => p.startsWith('feed_data/') ? '/' + p : '/feed_data/' + p,
+                afterStats: repliesSection,
+            });
         }).join('');
 
-        this.setupCarouselDrag();
-        this.setupVideoAutoplay();
+        PostRenderer.setupCarouselDrag();
+        PostRenderer.setupVideoAutoplay('viewer-feed');
     },
 
     toggleReplies(postId, btn) {
@@ -361,56 +242,4 @@ window.ViewerPage = {
         btn.textContent = isOpen ? `Show ${count} replies` : 'Hide replies';
     },
 
-    openLightbox(src) {
-        const lb = document.createElement('div');
-        lb.className = 'lightbox';
-        lb.innerHTML = `<button class="lightbox-close">&times;</button><img src="${src}">`;
-        lb.onclick = () => lb.remove();
-        document.body.appendChild(lb);
-    },
-
-    setupVideoAutoplay() {
-        // Disconnect previous observer if any
-        if (this._videoObserver) this._videoObserver.disconnect();
-
-        const videos = document.querySelectorAll('#viewer-feed video');
-        if (videos.length === 0) return;
-
-        this._videoObserver = new IntersectionObserver((entries) => {
-            for (const entry of entries) {
-                const video = entry.target;
-                if (entry.isIntersecting) {
-                    video.play().catch(() => {});
-                } else {
-                    video.pause();
-                }
-            }
-        }, { threshold: 0.5 });
-
-        videos.forEach(v => this._videoObserver.observe(v));
-    },
-
-    setupCarouselDrag() {
-        document.querySelectorAll('.viewer-carousel').forEach(carousel => {
-            let isDown = false, startX, scrollLeft, hasDragged = false;
-            carousel.addEventListener('mousedown', e => {
-                isDown = true; hasDragged = false;
-                startX = e.pageX - carousel.offsetLeft;
-                scrollLeft = carousel.scrollLeft;
-            });
-            carousel.addEventListener('mouseleave', () => { isDown = false; });
-            carousel.addEventListener('mouseup', () => { isDown = false; });
-            carousel.addEventListener('mousemove', e => {
-                if (!isDown) return;
-                e.preventDefault();
-                const x = e.pageX - carousel.offsetLeft;
-                const walk = (x - startX) * 1.5;
-                if (Math.abs(walk) > 5) hasDragged = true;
-                carousel.scrollLeft = scrollLeft - walk;
-            });
-            carousel.addEventListener('click', e => {
-                if (hasDragged) { e.stopPropagation(); e.preventDefault(); }
-            }, true);
-        });
-    },
 };

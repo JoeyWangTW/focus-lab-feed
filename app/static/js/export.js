@@ -78,6 +78,13 @@ window.ExportPage = {
         } catch (e) {
             this.workspace = { is_setup: false };
         }
+        // Load auto-export state so the checkbox renders with the right default.
+        try {
+            const r = await api('/workspace/auto-export');
+            this.autoExport = !!(r && r.enabled);
+        } catch (e) {
+            this.autoExport = false;
+        }
         this.renderCurationBody();
     },
 
@@ -118,16 +125,45 @@ window.ExportPage = {
 
         const path = this.workspace.path || '';
         const pretty = path.replace(/^\/Users\/[^/]+/, '~');
+        const autoChecked = this.autoExport ? 'checked' : '';
         body.innerHTML = `
             <div class="curation-dir-row">
                 <div class="curation-dir-label">Destination</div>
                 <div class="curation-dir-path" title="${path}">${pretty}/exports/</div>
                 <button class="btn btn-secondary btn-sm" onclick="ExportPage.changeWorkspace()">Change…</button>
             </div>
+            <label class="auto-export-toggle">
+                <span class="auto-export-text">
+                    <strong>Auto-export after every collection</strong>
+                    <span class="text-secondary text-xs">Runs this export automatically whenever a collection finishes, so the pack is ready to curate.</span>
+                </span>
+                <span class="toggle-switch">
+                    <input type="checkbox" id="auto-export-checkbox" ${autoChecked} onchange="ExportPage.toggleAutoExport(this.checked)">
+                    <span class="toggle-slider"></span>
+                </span>
+            </label>
             <button class="btn btn-primary" id="curation-export-btn" onclick="ExportPage.doCurationExport()">
                 Export for curation
             </button>
         `;
+    },
+
+    async toggleAutoExport(enabled) {
+        try {
+            await api('/workspace/auto-export', {
+                method: 'POST',
+                body: JSON.stringify({ enabled }),
+            });
+            this.autoExport = enabled;
+            this._showToast(enabled
+                ? 'Auto-export <strong>on</strong> — future collections will export automatically.'
+                : 'Auto-export off.');
+        } catch (e) {
+            alert('Could not update auto-export: ' + e.message);
+            // Revert checkbox on failure
+            const cb = document.getElementById('auto-export-checkbox');
+            if (cb) cb.checked = !enabled;
+        }
     },
 
     async pickFolder() {

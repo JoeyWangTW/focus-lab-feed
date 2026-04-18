@@ -334,7 +334,8 @@ a:hover { color: var(--accent); }
     border-color: var(--accent);
 }
 
-.setup-checkbox {
+.setup-checkbox,
+.auto-export-toggle {
     display: flex;
     align-items: flex-start;
     gap: var(--sp-2);
@@ -344,6 +345,68 @@ a:hover { color: var(--accent); }
     color: var(--text-secondary);
     cursor: pointer;
 }
+.auto-export-toggle {
+    margin-bottom: var(--sp-4);
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-4);
+}
+.auto-export-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.auto-export-text strong {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: var(--text-sm);
+}
+
+/* iOS-style toggle switch — reusable (hook: .toggle-switch + input + .toggle-slider) */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 38px;
+    height: 22px;
+    flex: 0 0 38px;
+}
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+}
+.toggle-slider {
+    position: absolute;
+    inset: 0;
+    cursor: pointer;
+    background: var(--border);
+    border-radius: var(--radius-full);
+    transition: background var(--transition);
+}
+.toggle-slider::before {
+    content: "";
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    left: 2px;
+    top: 2px;
+    background: #ffffff;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+    transition: transform var(--transition);
+}
+.toggle-switch input:checked + .toggle-slider { background: var(--accent); }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(16px); }
+.toggle-switch input:focus-visible + .toggle-slider {
+    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+}
+.toggle-switch input:disabled + .toggle-slider { opacity: 0.5; cursor: not-allowed; }
 .setup-checkbox input[type=checkbox] {
     flex: 0 0 auto;
     margin-top: 2px;
@@ -1039,7 +1102,15 @@ input[type="radio"] {
     line-height: 1.55;
     margin-bottom: var(--sp-3);
     word-wrap: break-word;
+    overflow-wrap: anywhere;
 }
+
+/* Only the actual text span is pre-wrap, so \n\n paragraph breaks from
+   Twitter/Threads render as blank lines without the template's own
+   indentation between sibling tags leaking into the rendered output. */
+.post-text { white-space: pre-wrap; }
+
+.quoted-post .text-sm { white-space: pre-wrap; word-wrap: break-word; }
 
 .post-body a { color: var(--accent); }
 .post-body a:hover { text-decoration: underline; }
@@ -1078,12 +1149,27 @@ input[type="radio"] {
     gap: var(--sp-1);
     overflow-x: auto;
     scroll-snap-type: x mandatory;
+    scroll-behavior: auto;
     border-radius: var(--radius-lg);
     margin-bottom: var(--sp-3);
     -webkit-overflow-scrolling: touch;
     height: 320px;
     cursor: grab;
     user-select: none;
+    -webkit-user-select: none;
+}
+
+/* While the user is dragging, turn off snap so the carousel tracks the
+   cursor 1:1 instead of springing toward the nearest slide between frames.
+   Snap re-engages a tick after mouseup so the rest position settles cleanly. */
+.post-carousel.dragging {
+    scroll-snap-type: none;
+    scroll-behavior: auto;
+    cursor: grabbing;
+}
+.post-carousel.dragging .post-carousel-item img,
+.post-carousel.dragging .post-carousel-item video {
+    pointer-events: none;
 }
 
 .post-carousel-item {
