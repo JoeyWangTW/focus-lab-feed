@@ -231,6 +231,7 @@ window.ViewerPage = {
 
         PostRenderer.setupCarouselDrag();
         PostRenderer.setupVideoAutoplay('viewer-feed');
+        PostRenderer.setupYoutubeHover('viewer-feed');
     },
 
     toggleReplies(postId, btn) {

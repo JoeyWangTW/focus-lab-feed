@@ -167,10 +167,11 @@ window.CuratedPage = {
             ` : ''}
         `;
 
-        // Video autoplay + carousel drag — same observers both pages use.
+        // Video autoplay + carousel drag + YT hover — same observers both pages use.
         if (this._videoObserver) this._videoObserver.disconnect();
         this._videoObserver = PostRenderer.setupVideoAutoplay('curated-feed');
         PostRenderer.setupCarouselDrag();
+        PostRenderer.setupYoutubeHover('curated-feed');
 
         this.applyCategoryFilter();
     },

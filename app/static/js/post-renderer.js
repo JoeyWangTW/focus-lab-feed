@@ -106,7 +106,12 @@ function renderQuoted(q, platform) {
 function renderMedia(post, platform, resolver) {
     const pd = post.platform_data || {};
     if (platform === 'youtube' && pd.embed_url) {
-        return `<div class="post-embed"><iframe src="${esc(pd.embed_url)}" allowfullscreen loading="lazy"></iframe></div>`;
+        // enablejsapi=1 → YT IFrame API can play/pause via JS on hover.
+        // mute=1       → autoplay is allowed without a user gesture.
+        // playsinline  → mobile Safari doesn't steal the screen.
+        const sep = pd.embed_url.includes('?') ? '&' : '?';
+        const src = `${pd.embed_url}${sep}enablejsapi=1&mute=1&playsinline=1`;
+        return `<div class="post-embed yt-hover-embed"><iframe src="${esc(src)}" allowfullscreen loading="lazy" frameborder="0"></iframe></div>`;
     }
 
     const localPaths = post.local_media_paths || [];
@@ -294,6 +299,69 @@ function openLightbox(src) {
     document.body.appendChild(lb);
 }
 
+// Wire YouTube embeds to play-on-hover / pause-on-leave, just like
+// YouTube's own homepage feed. Loads the YT IFrame API lazily (only if
+// there's at least one YouTube post on screen) and binds a YT.Player to
+// each .yt-hover-embed iframe so we can call playVideo / pauseVideo.
+let _ytApiPromise = null;
+function _loadYTApi() {
+    if (_ytApiPromise) return _ytApiPromise;
+    _ytApiPromise = new Promise(resolve => {
+        if (window.YT && window.YT.Player) { resolve(); return; }
+        // YT fires a single global when it's ready. Chain onto any prior one.
+        const prev = window.onYouTubeIframeAPIReady;
+        window.onYouTubeIframeAPIReady = () => {
+            if (prev) { try { prev(); } catch (_) {} }
+            resolve();
+        };
+        if (!document.querySelector('script[data-yt-iframe-api]')) {
+            const tag = document.createElement('script');
+            tag.src = 'https://www.youtube.com/iframe_api';
+            tag.setAttribute('data-yt-iframe-api', '1');
+            document.head.appendChild(tag);
+        }
+    });
+    return _ytApiPromise;
+}
+
+function setupYoutubeHover(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const wrappers = container.querySelectorAll('.yt-hover-embed');
+    if (wrappers.length === 0) return;
+
+    _loadYTApi().then(() => {
+        wrappers.forEach(wrap => {
+            // Re-entrance guard — renderPosts can run many times as the user
+            // changes sorts / platforms; only bind once per iframe.
+            if (wrap.dataset.ytHoverBound === '1') return;
+            wrap.dataset.ytHoverBound = '1';
+
+            const iframe = wrap.querySelector('iframe');
+            if (!iframe) return;
+            if (!iframe.id) iframe.id = 'yt-' + Math.random().toString(36).slice(2);
+
+            let player;
+            try {
+                player = new YT.Player(iframe.id, {
+                    events: {
+                        onReady: (e) => { try { e.target.mute(); } catch (_) {} },
+                    },
+                });
+            } catch (e) {
+                return;
+            }
+
+            wrap.addEventListener('mouseenter', () => {
+                try { player.playVideo && player.playVideo(); } catch (_) {}
+            });
+            wrap.addEventListener('mouseleave', () => {
+                try { player.pauseVideo && player.pauseVideo(); } catch (_) {}
+            });
+        });
+    });
+}
+
 window.PostRenderer = {
     renderPost,
     renderPostBody,
@@ -305,6 +373,7 @@ window.PostRenderer = {
     toggleReadMore,
     setupVideoAutoplay,
     setupCarouselDrag,
+    setupYoutubeHover,
     openLightbox,
     PLATFORM_LINKS,
 };
