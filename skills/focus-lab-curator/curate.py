@@ -201,6 +201,10 @@ def main() -> int:
                    help="force a specific CLI (default: auto — claude > codex > cursor-agent)")
     p.add_argument("--batch", type=int, default=BATCH_SIZE_DEFAULT, help=f"batch size (default {BATCH_SIZE_DEFAULT})")
     p.add_argument("--model", default=None, help="passed through to the CLI's --model flag")
+    p.add_argument("--keep-media", action="store_true",
+                   help="skip media cleanup (default: remove media for dropped posts to shrink the pack)")
+    p.add_argument("--drop-videos", action="store_true",
+                   help="additionally drop ALL videos (mp4/mov/webm) regardless of whether they're kept")
     args = p.parse_args()
 
     pack = Path(args.pack).resolve()
@@ -281,6 +285,66 @@ def main() -> int:
 
     out_path.write_text(json.dumps(output, indent=2, ensure_ascii=False))
     print(f"\nDone — {len(kept)} kept, {len(dropped)} dropped → {out_path}", file=sys.stderr)
+
+    # ---- Media cleanup ----
+    # Raw packs carry full-size media for EVERY collected post. After
+    # scoring, many posts are dropped but their media still sits in
+    # media/. Delete orphans (and optionally all videos) so the pack is
+    # small enough to AirDrop without complaints.
+    if not args.keep_media:
+        referenced: set[str] = set()
+        for post in kept:
+            for p2 in (post.get("local_media_paths") or []):
+                referenced.add(p2)
+            qp = post.get("quoted_post")
+            if isinstance(qp, dict):
+                for p2 in (qp.get("local_media_paths") or []):
+                    referenced.add(p2)
+
+        media_dir = pack / "media"
+        removed_count = 0
+        removed_bytes = 0
+        video_exts = {".mp4", ".mov", ".m4v", ".webm"}
+        if media_dir.exists():
+            for f in media_dir.rglob("*"):
+                if not f.is_file():
+                    continue
+                rel = str(f.relative_to(pack))  # "media/<name>"
+                is_video = f.suffix.lower() in video_exts
+                keep_it = (rel in referenced) and not (args.drop_videos and is_video)
+                if not keep_it:
+                    try:
+                        sz = f.stat().st_size
+                        f.unlink()
+                        removed_bytes += sz
+                        removed_count += 1
+                    except OSError:
+                        pass
+            # Also remove now-empty subdirectories under media/.
+            for d in sorted((p for p in media_dir.rglob("*") if p.is_dir()),
+                            key=lambda p: len(p.parts), reverse=True):
+                try:
+                    d.rmdir()
+                except OSError:
+                    pass
+
+        if removed_count:
+            mb = removed_bytes / 1024 / 1024
+            note = " (including all videos)" if args.drop_videos else ""
+            print(f"Trimmed {removed_count} orphan media file(s){note} — freed {mb:.1f} MB.",
+                  file=sys.stderr)
+
+            # Rewrite kept posts' local_media_paths to drop any path we deleted
+            # (shouldn't happen for the "referenced" set, but --drop-videos
+            # can delete referenced videos).
+            if args.drop_videos:
+                for post in kept:
+                    post["local_media_paths"] = [
+                        p2 for p2 in (post.get("local_media_paths") or [])
+                        if (pack / p2).exists()
+                    ]
+                output["posts"] = kept
+                out_path.write_text(json.dumps(output, indent=2, ensure_ascii=False))
     return 0
 
 

@@ -35,7 +35,8 @@ That's it. The script:
 - Chunks posts into batches of 20
 - **Auto-detects an agent CLI** (`claude` → `codex` → `cursor-agent`, in that order) and calls it per batch with the scoring rubric inlined. Override with `--cli claude|codex|cursor-agent`.
 - Assembles `posts.filtered.json` with drop rules applied and the audit log filled in
-- Prints `batch N/M...` to stderr so the user sees progress
+- **Trims orphan media** — deletes files in `media/` that no kept post references, so the pack shrinks from "full raw collection" to "just what survived curation" (often 10× smaller and easier to AirDrop). Pass `--keep-media` to skip. Pass `--drop-videos` to additionally strip all `.mp4` / `.mov` / `.webm` files.
+- Prints `batch N/M...` and a final `Trimmed N files, freed X MB` to stderr
 
 When the user asks to curate, your job is to:
 1. Check `goals.md` exists (if not → run the Bootstrap flow first, then continue)
@@ -308,17 +309,27 @@ Keep it short. The file is the real deliverable.
 
 After the summary, ask the user:
 
-> Want me to zip the pack folder for AirDrop? (y/n)
+> Want me to zip the curated pack for AirDrop? (y/n)
 
-If the user says yes, run the system `zip` from the parent directory so the archive contains the pack folder at its root:
+If yes, run the packer script shipped alongside `curate.py`:
 
 ```bash
-cd .. && zip -r "<pack_folder_name>.zip" "<pack_folder_name>" -x "*.DS_Store"
+python3 zip.py
 ```
 
-Substitute the actual folder name (the directory you're currently in, e.g. `focus-lab-pack-2026-04-16_120106`). After zipping, report the zip path and size.
+It creates `../{pack_name}.zip` with only the viewer-facing bits:
+`posts.filtered.json`, the already-trimmed `media/`, `viewer.html`,
+`focuslab-logo.svg`, `README.md`. It deliberately excludes the raw
+`posts.json`, `goals.md` (your preferences — keep off shared zips),
+and the scripts themselves. The resulting zip is typically a small
+fraction of the pack folder size.
 
-If the user says no, stop there. Don't zip repeatedly, don't create alternate formats, don't offer `.tar.gz` unless asked.
+Flags the user can opt into:
+- `python3 zip.py --include-raw` — also include unfiltered `posts.json`
+- `python3 zip.py --include-goals` — also include `goals.md`
+
+After zipping, report the zip path and size. If the user says no,
+stop there — don't zip repeatedly, don't create alternate formats.
 
 ---
 

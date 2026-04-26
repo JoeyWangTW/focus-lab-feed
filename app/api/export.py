@@ -138,6 +138,16 @@ def _curate_script_source() -> Path | None:
     return candidate if candidate.exists() else None
 
 
+def _zip_script_source() -> Path | None:
+    """Locate the pack-zipping script to bundle into packs."""
+    if IS_BUNDLED and MEIPASS:
+        candidate = MEIPASS / "skills" / "focus-lab-curator" / "zip.py"
+        if candidate.exists():
+            return candidate
+    candidate = PROJECT_ROOT / "skills" / "focus-lab-curator" / "zip.py"
+    return candidate if candidate.exists() else None
+
+
 def _pack_readme(pack_name: str, post_count: int, media_count: int) -> str:
     return f"""# {pack_name}
 
@@ -163,8 +173,16 @@ for you, or score in-context for small packs.
 
 ## View on phone
 
-1. Right-click this folder in Finder → Compress.
-2. AirDrop the resulting `.zip` to your phone.
+1. After running `curate.py`, pack up only the viewer-facing bits:
+
+       python3 zip.py
+
+   Writes `../{pack_name}.zip` with `posts.filtered.json`, the already-trimmed
+   `media/`, `viewer.html`, and a README — nothing else. No raw `posts.json`,
+   no `goals.md`, no scripts. Typical output is a small fraction of the
+   full folder.
+
+2. AirDrop that zip to your phone.
 3. On phone: Files app → tap zip → Uncompress → open `viewer.html` in Safari,
    or use the Focus Lab Feed viewer PWA and import the zip directly.
 """
@@ -233,15 +251,20 @@ async def export_curation(request: CurationExportRequest):
     if viewer:
         shutil.copy2(viewer, pack_dir / "viewer.html")
 
-    # Bundle curate.py — the batching harness the skill invokes.
-    curate_script = _curate_script_source()
-    if curate_script:
-        dest_curate = pack_dir / "curate.py"
-        shutil.copy2(curate_script, dest_curate)
-        try:
-            dest_curate.chmod(0o755)
-        except OSError:
-            pass
+    # Bundle curate.py + zip.py — the batching harness the skill invokes
+    # and the packer for AirDrop-ready archives.
+    for src_fn, dest_name in (
+        (_curate_script_source, "curate.py"),
+        (_zip_script_source, "zip.py"),
+    ):
+        src = src_fn()
+        if src:
+            dest = pack_dir / dest_name
+            shutil.copy2(src, dest)
+            try:
+                dest.chmod(0o755)
+            except OSError:
+                pass
 
     # Copy workspace goals.md if it exists (so the curator has something to start with).
     ws = get_workspace_dir()

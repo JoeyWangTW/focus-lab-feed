@@ -24,7 +24,7 @@ class NoCacheMiddleware(BaseHTTPMiddleware):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Focus Lab Feed Collector")
+    app = FastAPI(title="Focus Lab — Vibe Scrolling")
 
     # Migrate old flat run directories to new date/job/platform hierarchy
     migrate_legacy_runs(str(FEED_DATA_DIR))

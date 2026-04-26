@@ -44,8 +44,8 @@ def _apply_dock_icon() -> None:
         bundle = NSBundle.mainBundle()
         info = bundle.localizedInfoDictionary() or bundle.infoDictionary()
         if info is not None:
-            info["CFBundleName"] = "Focus Lab Feed"
-            info["CFBundleDisplayName"] = "Focus Lab Feed"
+            info["CFBundleName"] = "Focus Lab — Vibe Scrolling"
+            info["CFBundleDisplayName"] = "Focus Lab — Vibe Scrolling"
     except Exception as e:
         print(f"[app] Could not set app name: {e}")
 
@@ -141,7 +141,7 @@ def main():
                     return result[0] if isinstance(result, (list, tuple)) else str(result)
 
             print(f"[app] Opening native window (server at {url})")
-            webview.create_window("Focus Lab Feed", url, width=1200, height=800, js_api=JsApi())
+            webview.create_window("Focus Lab — Vibe Scrolling", url, width=1200, height=800, js_api=JsApi())
             # pywebview's start() runs our callback on the main thread once
             # NSApplication is live — that's when setApplicationIconImage_ sticks.
             webview.start(_apply_dock_icon)

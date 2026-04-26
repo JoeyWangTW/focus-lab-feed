@@ -3,27 +3,40 @@
  * Page modules are loaded from separate files.
  */
 
-const App = {
+// Exposed on `window` so other classic scripts (e.g. onboarding.js running
+// inside its own IIFE) can call `window.App.bootApp()` after onboarding finishes.
+// Top-level `const` in a classic script does NOT attach to window — without
+// this, finish() short-circuited and the main app never booted.
+const App = window.App = {
     currentPage: null,
     pages: {},
 
     async init() {
-        // Check setup status first
-        const setupOk = await this.checkSetup();
-        if (!setupOk) return; // Onboarding will call init() again when done
+        // Gate on onboarding — returning users (workspace set up, Chromium installed)
+        // skip straight to the app; first-timers get the full walkthrough.
+        const needsOnboarding = await this.checkOnboardingNeeded();
+        if (needsOnboarding) {
+            Onboarding.start();
+            return;
+        }
 
+        this.bootApp();
+    },
+
+    bootApp() {
         // Register page modules (loaded from separate script files)
         this.pages = {
-            platforms: window.PlatformsPage || { render: () => '<div class="empty-state"><div class="icon">&#9783;</div><p>Loading platforms...</p></div>' },
             collect: window.CollectPage || { render: () => '<div class="empty-state"><div class="icon">&#9655;</div><p>Loading collection...</p></div>' },
             viewer: window.ViewerPage || { render: () => '<div class="empty-state"><div class="icon">&#9776;</div><p>Loading viewer...</p></div>' },
             curated: window.CuratedPage || { render: () => '<div class="empty-state"><div class="icon">&#9734;</div><p>Loading curated feed...</p></div>' },
             export: window.ExportPage || { render: () => '<div class="empty-state"><div class="icon">&#8681;</div><p>Loading export...</p></div>' },
             curate: window.CuratePage || { render: () => '<div class="empty-state"><div class="icon">&#9883;</div><p>Loading curation...</p></div>' },
+            settings: window.SettingsPage || { render: () => '<div class="empty-state"><div class="icon">&#9881;</div><p>Loading settings...</p></div>' },
         };
 
-        // Show main app
-        document.getElementById('app').style.display = 'flex';
+        // Show main app — overrides any inline display:none from Onboarding.start().
+        const appEl = document.getElementById('app');
+        if (appEl) appEl.style.display = 'flex';
 
         // Populate workspace chip (runs once; refreshWorkspaceChip binds button handler)
         this.refreshWorkspaceChip();
@@ -61,105 +74,27 @@ const App = {
 
         // Handle hash navigation
         window.addEventListener('hashchange', () => {
-            const page = location.hash.slice(1) || 'platforms';
+            const page = location.hash.slice(1) || 'collect';
             this.navigate(page, false);
         });
 
-        // Initial page
-        const page = location.hash.slice(1) || 'platforms';
+        // Initial page — default to Collect (the action), not Settings (config)
+        const page = location.hash.slice(1) || 'collect';
         this.navigate(page, false);
     },
 
-    async checkSetup() {
+    async checkOnboardingNeeded() {
+        // Show onboarding when EITHER the browser engine is missing OR the
+        // user hasn't set up a workspace yet. Both are hard requirements to
+        // actually use the app, and both are collected by Onboarding.
         try {
-            const status = await api('/setup/status');
-            if (!status.setup_needed) return true;
-
-            // Show onboarding
-            this.showOnboarding();
+            const [setup, ws] = await Promise.all([
+                api('/setup/status').catch(() => ({ setup_needed: false })),
+                api('/workspace').catch(() => ({ is_setup: true })), // fail open — don't block if API down
+            ]);
+            return !!(setup.setup_needed || !ws.is_setup);
+        } catch (e) {
             return false;
-        } catch (e) {
-            // If setup endpoint fails, continue anyway (dev mode without Playwright check)
-            return true;
-        }
-    },
-
-    showOnboarding() {
-        document.getElementById('app').style.display = 'none';
-
-        let overlay = document.getElementById('onboarding');
-        if (!overlay) {
-            overlay = document.createElement('div');
-            overlay.id = 'onboarding';
-            document.body.appendChild(overlay);
-        }
-
-        overlay.innerHTML = `
-            <div class="onboarding-overlay">
-                <div class="onboarding-content">
-                    <div style="font-size:48px;margin-bottom:24px">🔬</div>
-                    <h1>Focus Lab Feed</h1>
-                    <p>First-time setup: we need to download a browser engine to collect social media feeds.</p>
-                    <button class="btn btn-primary" id="setup-start-btn" onclick="App.startSetup()">
-                        Set Up Now
-                    </button>
-                    <div id="setup-progress" class="onboarding-progress hidden">
-                        <div class="progress-bar">
-                            <div class="progress-fill" id="setup-bar" style="width:0%;animation:setup-pulse 2s infinite"></div>
-                        </div>
-                        <p id="setup-msg">Downloading Chromium browser...</p>
-                    </div>
-                </div>
-            </div>
-        `;
-    },
-
-    async startSetup() {
-        const btn = document.getElementById('setup-start-btn');
-        btn.classList.add('hidden');
-        document.getElementById('setup-progress').classList.remove('hidden');
-
-        try {
-            await api('/setup/install', { method: 'POST' });
-
-            // Poll until done
-            let attempts = 0;
-            while (attempts < 120) { // 5 minutes max (120 * 2.5s)
-                await new Promise(r => setTimeout(r, 2500));
-                const status = await api('/setup/status');
-
-                if (!status.installing) {
-                    if (status.install_result && !status.install_result.success) {
-                        document.getElementById('setup-msg').textContent =
-                            `Setup failed: ${status.install_result.message}`;
-                        document.getElementById('setup-msg').classList.add('text-danger');
-                        btn.classList.remove('hidden');
-                        btn.textContent = 'Retry';
-                        document.getElementById('setup-progress').classList.add('hidden');
-                        return;
-                    }
-
-                    // Success!
-                    document.getElementById('setup-bar').style.width = '100%';
-                    document.getElementById('setup-bar').style.animation = 'none';
-                    document.getElementById('setup-msg').textContent = 'Setup complete!';
-
-                    await new Promise(r => setTimeout(r, 1000));
-
-                    // Remove overlay and start app
-                    const overlay = document.getElementById('onboarding');
-                    if (overlay) overlay.remove();
-                    App.init();
-                    return;
-                }
-                attempts++;
-            }
-
-            document.getElementById('setup-msg').textContent = 'Setup timed out. Please try again.';
-            document.getElementById('setup-msg').classList.add('text-danger');
-        } catch (e) {
-            document.getElementById('setup-msg').textContent = `Error: ${e.message}`;
-            document.getElementById('setup-msg').classList.add('text-danger');
         }
     },
 
@@ -178,9 +113,9 @@ const App = {
             } else {
                 pathEl.textContent = 'Not set up';
                 pathEl.title = '';
-                openBtn.textContent = 'Go to Export to set up';
+                openBtn.textContent = 'Set up in Settings';
                 openBtn.disabled = false;
-                openBtn.onclick = () => { location.hash = 'export'; };
+                openBtn.onclick = () => { location.hash = 'settings'; };
                 return;
             }
             openBtn.onclick = async () => {
@@ -193,7 +128,9 @@ const App = {
     },
 
     navigate(page, updateHash = true) {
-        if (!this.pages[page]) page = 'platforms';
+        // Legacy aliases — old hash links from before the Platforms→Settings move.
+        if (page === 'platforms') page = 'settings';
+        if (!this.pages[page]) page = 'collect';
 
         // Update nav active state
         document.querySelectorAll('.nav-item').forEach(item => {

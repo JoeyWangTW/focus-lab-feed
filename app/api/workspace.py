@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.paths import get_workspace_dir, suggested_workspace_dir
-from app.workspace import bootstrap_workspace, reveal_in_finder, save_workspace_dir
+from app.workspace import bootstrap_workspace, reveal_in_finder, save_workspace_dir, skill_status
 
 router = APIRouter()
 
@@ -85,6 +85,33 @@ async def setup(request: SetupRequest):
     result = bootstrap_workspace(target, update_app_files=request.update_app_files)
     save_workspace_dir(target)
     return {"success": True, **result}
+
+
+@router.get("/skill-status")
+async def get_skill_status():
+    """Is the workspace's curator skill in sync with the shipped version?
+
+    Used by the UI to offer a one-click update when a new app version ships
+    a newer skill. `outdated` is false when versions match OR when the
+    workspace's skill path resolves to the shipped source (dev mode).
+    """
+    return skill_status()
+
+
+@router.post("/skill-update")
+async def update_skill():
+    """Force-refresh the workspace's curator skill to the shipped version.
+
+    Thin wrapper around `bootstrap_workspace(workspace, update_app_files=True)`
+    — doesn't touch `goals.md` or anything else user-owned.
+    """
+    ws = get_workspace_dir()
+    if ws is None:
+        raise HTTPException(412, "Workspace not set up yet.")
+    result = bootstrap_workspace(ws, update_app_files=True)
+    # Return both the bootstrap result and the new status so the UI can
+    # hide the banner in the same round-trip.
+    return {"success": True, **result, "status": skill_status()}
 
 
 @router.get("/auto-export")

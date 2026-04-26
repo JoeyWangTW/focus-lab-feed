@@ -1,8 +1,15 @@
 # Project Status
 
-**Last updated:** 2026-03-23
+**Last updated:** 2026-04-22
 
-**Current state:** Desktop app built and bundled as macOS .app with FastAPI backend, web UI, and PyWebView native window. Multi-platform collection working (Twitter, Threads, Instagram, YouTube).
+**Current state:** Desktop app rebranded to **Focus Lab — Vibe Scrolling** with a proper gated onboarding, a focused Curate-with-AI tab, and a clarified Export page. Multi-platform collection working (Twitter, Threads, Instagram, YouTube).
+
+## Recently Completed (2026-04-22)
+
+- **Rebrand to Focus Lab — Vibe Scrolling:** browser title, Dock/bundle name, window title, sidebar logo
+- **Multi-step onboarding:** welcome walkthrough (emoji pipeline) → Chromium install → connect ≥1 platform → pick export folder with auto-export toggle. Main app stays hidden until all four are satisfied
+- **Curate with AI tab:** focused workflow — goals editor → pack check → agent picker (Claude Code/Cursor/Codex/other) with copy-paste launch + prompt → link to AI Curation
+- **Export page:** clearer "choose day and platform" framing + floating bottom-right "Open folder" FAB
 
 ## Recently Completed (2026-03-23)
 
