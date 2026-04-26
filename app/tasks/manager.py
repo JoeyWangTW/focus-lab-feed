@@ -14,6 +14,7 @@ class TrackedTask:
     platform: str
     status: str = "starting"  # starting, running, waiting_for_login, completed, failed, cancelled
     started_at: str = ""
+    job_id: str = ""  # collection-only: groups platforms run together for auto-export
     progress: dict = field(default_factory=dict)
     summary: dict | None = None
     error: str | None = None
@@ -71,6 +72,11 @@ class TaskManager:
             if t.task_type == "collection" and t.platform == platform and t.status in ("starting", "running"):
                 return t
         return None
+
+    def get_collection_tasks_by_job(self, job_id: str) -> list[TrackedTask]:
+        """All collection tasks (active or finished) for a given job_id."""
+        return [t for t in self._tasks.values()
+                if t.task_type == "collection" and t.job_id == job_id]
 
 
 # Singleton

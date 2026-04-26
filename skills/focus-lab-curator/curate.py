@@ -289,8 +289,7 @@ def main() -> int:
     # ---- Media cleanup ----
     # Raw packs carry full-size media for EVERY collected post. After
     # scoring, many posts are dropped but their media still sits in
-    # media/. Delete orphans (and optionally all videos) so the pack is
-    # small enough to AirDrop without complaints.
+    # media/. Delete orphans (and optionally all videos) to shrink the pack.
     if not args.keep_media:
         referenced: set[str] = set()
         for post in kept:

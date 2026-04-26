@@ -2,11 +2,13 @@
  * Curate with AI — the focused curation workflow.
  *
  * Flow:
- *   1. State your goals (what kind of content you actually want).
+ *   1. Set expectations: the agent runs a short Q&A to learn your goals on first run.
  *   2. Confirm you have a pack exported (gates the flow — otherwise nudge to Export).
  *   3. Pick your AI agent (Claude Code, Cursor, Codex, other) and copy-paste the
  *      launch command + prompt.
- *   4. When the agent writes posts.filtered.json, it shows up under AI Curation.
+ *   4. Review/edit goals — once the agent has interviewed you, your `goals.md`
+ *      lives in the workspace and is editable here.
+ *   5. When the agent writes posts.filtered.json, it shows up under AI Curation.
  *
  * Deliberately separate from the raw Feed (#viewer) and curated Feed
  * (#curated) pages — this is the "how do I actually run curation" surface.
@@ -122,15 +124,18 @@ window.CuratePage = {
         }
 
         body.innerHTML = [
-            this._sectionGoals(),
+            this._sectionIntro(),
             this._sectionPackCheck(),
             this._sectionAgent(),
+            this._sectionGoals(),
             this._sectionViewResult(),
         ].join('');
 
         // Wire up handlers.
         const save = document.getElementById('curate-goals-save');
         if (save) save.addEventListener('click', () => this.saveGoals());
+        const refreshGoals = document.getElementById('curate-goals-refresh');
+        if (refreshGoals) refreshGoals.addEventListener('click', () => this.refreshGoals());
 
         document.querySelectorAll('[data-agent-id]').forEach(el => {
             el.addEventListener('click', () => {
@@ -154,31 +159,56 @@ window.CuratePage = {
 
     // --------------------------------------------------------------- sections
 
-    _sectionGoals() {
-        const content = (this.goals && this.goals.content) || '';
-        const hasContent = content.trim().length > 0;
+    _sectionIntro() {
         return `
             <div class="card curate-section">
                 <div class="curate-section-head">
                     <div class="curate-section-num">1</div>
                     <div>
-                        <h3 class="font-semibold text-subtitle">What are your goals?</h3>
+                        <h3 class="font-semibold text-subtitle">How this works</h3>
                         <p class="text-secondary text-sm mt-1">
-                            What do you care about? What kinds of posts feel like drain?
-                            Your agent scores every post against this. You can leave it blank
-                            and the agent will interview you on first run.
+                            On the first run, your AI agent does a short Q&amp;A to learn what you
+                            actually want to see — your goals, what brings you joy, and what feels
+                            like drain. It saves that to <code>goals.md</code> in your workspace, then
+                            scores every post against it. You can review and tweak the answers
+                            below in <strong>step 4</strong> after the agent finishes.
                         </p>
                     </div>
                 </div>
-                <textarea id="curate-goals-textarea" class="goals-textarea" rows="8"
-                    spellcheck="false"
-                    placeholder="e.g.  I'm learning Rust and working on a startup. I like deep technical posts, AI agent demos, and understated design. I don't want to see political takes, outrage engagement bait, or crypto hype.">${esc(content)}</textarea>
-                <div class="flex items-center gap-2 mt-2">
-                    <button class="btn btn-primary btn-sm" id="curate-goals-save">Save goals</button>
-                    <span class="text-secondary text-sm" id="curate-goals-status">
-                        ${hasContent ? 'Saved — you can edit any time.' : ''}
-                    </span>
+            </div>
+        `;
+    },
+
+    _sectionGoals() {
+        const content = (this.goals && this.goals.content) || '';
+        const hasContent = content.trim().length > 0;
+        const headerNote = hasContent
+            ? 'Your agent has captured these from your Q&amp;A. Tweak any time.'
+            : 'Empty for now. Run your agent in step 3 — it will interview you and write this file. Come back to refine.';
+        return `
+            <div class="card curate-section">
+                <div class="curate-section-head">
+                    <div class="curate-section-num ${hasContent ? 'done' : ''}">4</div>
+                    <div style="flex:1">
+                        <h3 class="font-semibold text-subtitle">Review &amp; tweak your goals</h3>
+                        <p class="text-secondary text-sm mt-1">${headerNote}</p>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" id="curate-goals-refresh" title="Reload goals.md from disk">Reload</button>
                 </div>
+                ${hasContent ? `
+                    <textarea id="curate-goals-textarea" class="goals-textarea" rows="12" spellcheck="false">${esc(content)}</textarea>
+                    <div class="flex items-center gap-2 mt-2">
+                        <button class="btn btn-primary btn-sm" id="curate-goals-save">Save changes</button>
+                        <span class="text-secondary text-sm" id="curate-goals-status"></span>
+                    </div>
+                ` : `
+                    <div class="empty-state" style="padding: var(--sp-4) 0 0">
+                        <p class="text-secondary text-sm">
+                            <code>goals.md</code> hasn't been written yet. Run the agent above and
+                            answer the Q&amp;A — it'll appear here automatically.
+                        </p>
+                    </div>
+                `}
             </div>
         `;
     },
@@ -277,13 +307,12 @@ window.CuratePage = {
         return `
             <div class="card curate-section">
                 <div class="curate-section-head">
-                    <div class="curate-section-num">4</div>
+                    <div class="curate-section-num">5</div>
                     <div>
                         <h3 class="font-semibold text-subtitle">See the curated result</h3>
                         <p class="text-secondary text-sm mt-1">
                             When your agent writes <code>posts.filtered.json</code> in the pack folder,
                             it shows up on <a href="#curated">AI Curation</a> with per-post scores and reasons.
-                            Right-click the pack in Finder → <em>Compress</em> and AirDrop the zip to your phone to read it on the go.
                         </p>
                     </div>
                 </div>
@@ -306,6 +335,17 @@ window.CuratePage = {
         const p = document.getElementById('prompt-code');
         if (l) l.textContent = agent.launchCmd(path);
         if (p) p.textContent = agent.prompt(path);
+    },
+
+    async refreshGoals() {
+        const btn = document.getElementById('curate-goals-refresh');
+        if (btn) { btn.disabled = true; btn.textContent = 'Reloading…'; }
+        try {
+            this.goals = await api('/workspace/goals');
+        } catch (e) {
+            this.goals = null;
+        }
+        this.renderBody();
     },
 
     async saveGoals() {

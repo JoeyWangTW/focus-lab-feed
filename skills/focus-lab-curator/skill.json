@@ -6,7 +6,6 @@
   "files": [
     "SKILL.md",
     "curate.py",
-    "zip.py",
     "install.md",
     "templates/goals.md"
   ]

@@ -34,7 +34,7 @@ Three steps, three places:
 
 **2. Curate (your AI agent).** You export a *pack* — a folder with `posts.json`, the media files, and a Markdown skill file. You `cd` into it and run any agent you like: Claude Code, Cursor, Codex CLI, anything. You say "curate this feed." The agent reads your `goals.md` (or interviews you if you haven't written one), scores every post 0–100, and writes `posts.filtered.json`.
 
-**3. Consume (phone viewer).** You AirDrop the pack to your phone — or import it directly into the hosted viewer. Scrolling feels like any other feed, except the posts are yours, ordered by what matters to you, with the media inline and the scroll position remembered for next time.
+**3. Consume (in-app viewer).** Open the Focus Lab desktop app's **AI Curation** tab. The curated pack shows up automatically — scroll like any other feed, except the posts are yours, ordered by what matters to you, with the media inline and the scroll position remembered for next time.
 
 ---
 
@@ -58,8 +58,8 @@ A single HTML file. No app install, no account, no backend. Drop a pack `.zip` o
 
 1. Open `HOSTED_VIEWER_URL` in Safari on your phone.
 2. Tap **Add to Home Screen** if you want it to feel like an app — no install, just a bookmark icon.
-3. On your Mac, export a pack and AirDrop the zipped folder to your phone.
-4. Back in the viewer, tap the drop zone → **Choose File** → pick the AirDropped zip.
+3. On your Mac, export a pack from the desktop app.
+4. Back in the viewer, tap the drop zone → **Choose File** → pick the pack zip.
 5. Scroll. Videos autoplay. Tap to unmute. Tap "Open on X" on any post to jump to the original.
 6. Close the tab. Reopen later — the viewer remembers the pack and where you were.
 

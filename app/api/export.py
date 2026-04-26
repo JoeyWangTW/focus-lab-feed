@@ -4,8 +4,7 @@ Two distinct exports:
 
 * **Curation export** — writes an unzipped folder `<curation_dir>/focus-lab-pack-<timestamp>/`
   containing `posts.json`, `media/`, `goals.md`, `viewer.html`, and `README.md`.
-  Ready to `cd` into and run an agent. The user zips it themselves (Finder
-  right-click → Compress) for AirDrop.
+  Ready to `cd` into and run an agent.
 
 * **Raw export** — a single `.json` or `.csv` file in `~/Downloads/`. No media,
   no zip. For analysis, backup, or piping into other tools.
@@ -138,16 +137,6 @@ def _curate_script_source() -> Path | None:
     return candidate if candidate.exists() else None
 
 
-def _zip_script_source() -> Path | None:
-    """Locate the pack-zipping script to bundle into packs."""
-    if IS_BUNDLED and MEIPASS:
-        candidate = MEIPASS / "skills" / "focus-lab-curator" / "zip.py"
-        if candidate.exists():
-            return candidate
-    candidate = PROJECT_ROOT / "skills" / "focus-lab-curator" / "zip.py"
-    return candidate if candidate.exists() else None
-
-
 def _pack_readme(pack_name: str, post_count: int, media_count: int) -> str:
     return f"""# {pack_name}
 
@@ -171,20 +160,11 @@ You can also run your agent (Claude Code / Cursor / Codex) in this directory
 and say "curate this feed" — the Focus Lab Curator skill will run the script
 for you, or score in-context for small packs.
 
-## View on phone
+## View the result
 
-1. After running `curate.py`, pack up only the viewer-facing bits:
-
-       python3 zip.py
-
-   Writes `../{pack_name}.zip` with `posts.filtered.json`, the already-trimmed
-   `media/`, `viewer.html`, and a README — nothing else. No raw `posts.json`,
-   no `goals.md`, no scripts. Typical output is a small fraction of the
-   full folder.
-
-2. AirDrop that zip to your phone.
-3. On phone: Files app → tap zip → Uncompress → open `viewer.html` in Safari,
-   or use the Focus Lab Feed viewer PWA and import the zip directly.
+When `curate.py` finishes, the Focus Lab desktop app's **AI Curation** tab
+picks up `posts.filtered.json` automatically — open the app and switch to
+that tab to scroll the curated feed.
 """
 
 
@@ -206,7 +186,7 @@ async def export_curation(request: CurationExportRequest):
     """Write an unzipped pack folder into the curation directory.
 
     The folder contains posts.json, media/, goals.md (from workspace), viewer.html,
-    and a README. User zips it themselves for AirDrop; agents cd into it to curate.
+    and a README. Agents cd into it to curate.
     """
     all_posts: list[dict] = []
     for run_id in request.run_ids:
@@ -251,11 +231,9 @@ async def export_curation(request: CurationExportRequest):
     if viewer:
         shutil.copy2(viewer, pack_dir / "viewer.html")
 
-    # Bundle curate.py + zip.py — the batching harness the skill invokes
-    # and the packer for AirDrop-ready archives.
+    # Bundle curate.py — the batching harness the skill invokes.
     for src_fn, dest_name in (
         (_curate_script_source, "curate.py"),
-        (_zip_script_source, "zip.py"),
     ):
         src = src_fn()
         if src:

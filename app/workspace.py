@@ -39,7 +39,7 @@ scoring posts 0–100 against those preferences, and producing
 1. The user imports a pack — `cd ./exports/focus-lab-pack-YYYY-MM-DD_HHMMSS/`.
 2. The user says "curate this feed" (or similar).
 3. You use the curator skill to produce `posts.filtered.json` in that pack folder.
-4. The user re-zips the pack and AirDrops it to their phone.
+4. The Focus Lab desktop app's **AI Curation** tab picks it up automatically.
 
 ## Goals resolution
 
@@ -83,8 +83,8 @@ Everything Focus Lab Feed needs lives here.
        claude                         # then say: "curate this feed"
 
    The skill produces `posts.filtered.json` in the pack folder.
-4. **View** — right-click the pack folder in Finder → Compress. AirDrop the
-   zip to your phone, open the Focus Lab Feed viewer, import the zip.
+4. **View** — open the Focus Lab Feed app's **AI Curation** tab. The pack
+   shows up automatically once `posts.filtered.json` is written.
 
 ## Goals
 
