@@ -70,10 +70,10 @@ window.CuratedPage = {
                 <div class="card">
                     <h3 class="font-semibold text-subtitle mb-2">Workspace not set up</h3>
                     <p class="text-secondary text-sm mb-3">
-                        Pick a workspace folder first (Export page), then come back after you've
+                        Pick an export folder in <strong>Settings</strong> first, then come back after you've
                         exported and curated a pack.
                     </p>
-                    <a href="#export" class="btn btn-primary">Go to Export</a>
+                    <a href="#settings" class="btn btn-primary">Go to Settings</a>
                 </div>
             `;
             return;

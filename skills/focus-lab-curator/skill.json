@@ -1,0 +1,12 @@
+{
+  "name": "focus-lab-curator",
+  "version": "1.0.0",
+  "description": "Curate a Focus Lab Feed pack — score, drop, and reorder posts against the user's content goals.",
+  "updated_at": "2026-04-18",
+  "files": [
+    "SKILL.md",
+    "curate.py",
+    "install.md",
+    "templates/goals.md"
+  ]
+}

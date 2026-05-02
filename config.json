@@ -37,5 +37,7 @@
       "max_minutes": 5,
       "session_file": "session/youtube_state.json"
     }
-  }
+  },
+  "auto_export": true,
+  "workspace_dir": "/Users/joeywang/Documents/social-feed"
 }

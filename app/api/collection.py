@@ -68,10 +68,35 @@ async def _run_collection(task, platform: str, config: dict):
         print(f"[collection:{platform}] Failed: {e}")
 
 
+# Per-job dedupe: the UI fires /collection/start/{platform} once per platform,
+# and each call schedules its own auto-export coordinator. Without a guard,
+# 4 platforms = 4 export folders. First coordinator per job_id wins; the rest
+# return immediately.
+_auto_exported_jobs: set[str] = set()
+_auto_export_lock = asyncio.Lock()
+
+
 async def _maybe_auto_export(job_id: str, tasks: list[asyncio.Task]):
-    """Coordinator: after all platforms in this job finish, run a curation
-    export if `config.auto_export` is enabled. Fire-and-forget from /start."""
-    await asyncio.gather(*tasks, return_exceptions=True)
+    """Coordinator: after every platform in this job finishes, run a single
+    curation export if `config.auto_export` is enabled. Fire-and-forget from
+    /start. Idempotent per job_id — multiple callers collapse to one export."""
+    async with _auto_export_lock:
+        if job_id in _auto_exported_jobs:
+            return
+        _auto_exported_jobs.add(job_id)
+
+    # Brief debounce so any sibling /start/{platform} calls under this job_id
+    # have time to register their TrackedTasks before we snapshot the list.
+    await asyncio.sleep(0.5)
+
+    sibling_async_tasks = [
+        t._asyncio_task for t in task_manager.get_collection_tasks_by_job(job_id)
+        if t._asyncio_task is not None
+    ]
+    # Wait on the union of explicitly-passed tasks and any sibling tasks
+    # discovered via task_manager — ensures we export ONCE, after the last
+    # platform under this job_id finishes.
+    await asyncio.gather(*sibling_async_tasks, *tasks, return_exceptions=True)
 
     cfg = _load_config()
     if not cfg.get("auto_export"):
@@ -119,6 +144,7 @@ async def start_collection(request: CollectionRequest):
             continue
 
         task = task_manager.create_task("collection", platform)
+        task.job_id = job_id
         if request.max_posts:
             task.progress["max_posts_override"] = request.max_posts
 
@@ -145,12 +171,15 @@ async def start_single_collection(platform: str, max_posts: int | None = None, j
     # Use provided job_id or create a new one
     config["_job_id"] = job_id or create_job_id()
     task = task_manager.create_task("collection", platform)
+    task.job_id = config["_job_id"]
     if max_posts:
         task.progress["max_posts_override"] = max_posts
 
     task._asyncio_task = asyncio.create_task(_run_collection(task, platform, config))
 
     # Fire-and-forget auto-export coordinator (no-op unless config.auto_export).
+    # Per-job dedupe inside _maybe_auto_export keeps multi-platform UI starts
+    # from producing one pack per platform.
     asyncio.create_task(_maybe_auto_export(config["_job_id"], [task._asyncio_task]))
 
     return {"task_id": task.task_id, "status": task.status, "platform": platform, "job_id": config["_job_id"]}

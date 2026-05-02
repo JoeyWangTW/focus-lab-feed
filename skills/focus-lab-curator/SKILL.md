@@ -35,13 +35,14 @@ That's it. The script:
 - Chunks posts into batches of 20
 - **Auto-detects an agent CLI** (`claude` → `codex` → `cursor-agent`, in that order) and calls it per batch with the scoring rubric inlined. Override with `--cli claude|codex|cursor-agent`.
 - Assembles `posts.filtered.json` with drop rules applied and the audit log filled in
-- Prints `batch N/M...` to stderr so the user sees progress
+- **Trims orphan media** — deletes files in `media/` that no kept post references, so the pack shrinks from "full raw collection" to "just what survived curation" (often 10× smaller). Pass `--keep-media` to skip. Pass `--drop-videos` to additionally strip all `.mp4` / `.mov` / `.webm` files.
+- Prints `batch N/M...` and a final `Trimmed N files, freed X MB` to stderr
 
 When the user asks to curate, your job is to:
 1. Check `goals.md` exists (if not → run the Bootstrap flow first, then continue)
 2. Run `python3 curate.py` via your `Bash` tool from the pack directory
 3. Surface the script's stderr progress to the user
-4. When it finishes, report the kept/dropped counts and what to do next (zip + AirDrop)
+4. When it finishes, report the kept/dropped counts — the Focus Lab desktop app's **AI Curation** tab will pick up `posts.filtered.json` automatically.
 
 Pass-through flags when useful: `--batch 10` for smaller batches, `--model <name>` for a specific model, `--cli <name>` to force one backend.
 
@@ -300,25 +301,9 @@ Print a short summary. Example:
 > Joyful: @cats (81) — "Cat video — you flagged pets as joy."
 > Sample drop: @outrage_account (5, drain) — "Drama/outrage loop, matches your avoid list."
 >
-> Next: zip this folder and AirDrop it to your phone (I can do the zip for you — want me to?).
+> Next: open the Focus Lab Feed app's **AI Curation** tab — the pack will be there.
 
 Keep it short. The file is the real deliverable.
-
-### Offer to zip (after reporting)
-
-After the summary, ask the user:
-
-> Want me to zip the pack folder for AirDrop? (y/n)
-
-If the user says yes, run the system `zip` from the parent directory so the archive contains the pack folder at its root:
-
-```bash
-cd .. && zip -r "<pack_folder_name>.zip" "<pack_folder_name>" -x "*.DS_Store"
-```
-
-Substitute the actual folder name (the directory you're currently in, e.g. `focus-lab-pack-2026-04-16_120106`). After zipping, report the zip path and size.
-
-If the user says no, stop there. Don't zip repeatedly, don't create alternate formats, don't offer `.tar.gz` unless asked.
 
 ---
 

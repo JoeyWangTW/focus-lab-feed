@@ -4,8 +4,7 @@ Two distinct exports:
 
 * **Curation export** — writes an unzipped folder `<curation_dir>/focus-lab-pack-<timestamp>/`
   containing `posts.json`, `media/`, `goals.md`, `viewer.html`, and `README.md`.
-  Ready to `cd` into and run an agent. The user zips it themselves (Finder
-  right-click → Compress) for AirDrop.
+  Ready to `cd` into and run an agent.
 
 * **Raw export** — a single `.json` or `.csv` file in `~/Downloads/`. No media,
   no zip. For analysis, backup, or piping into other tools.
@@ -161,12 +160,11 @@ You can also run your agent (Claude Code / Cursor / Codex) in this directory
 and say "curate this feed" — the Focus Lab Curator skill will run the script
 for you, or score in-context for small packs.
 
-## View on phone
+## View the result
 
-1. Right-click this folder in Finder → Compress.
-2. AirDrop the resulting `.zip` to your phone.
-3. On phone: Files app → tap zip → Uncompress → open `viewer.html` in Safari,
-   or use the Focus Lab Feed viewer PWA and import the zip directly.
+When `curate.py` finishes, the Focus Lab desktop app's **AI Curation** tab
+picks up `posts.filtered.json` automatically — open the app and switch to
+that tab to scroll the curated feed.
 """
 
 
@@ -188,7 +186,7 @@ async def export_curation(request: CurationExportRequest):
     """Write an unzipped pack folder into the curation directory.
 
     The folder contains posts.json, media/, goals.md (from workspace), viewer.html,
-    and a README. User zips it themselves for AirDrop; agents cd into it to curate.
+    and a README. Agents cd into it to curate.
     """
     all_posts: list[dict] = []
     for run_id in request.run_ids:
@@ -234,14 +232,17 @@ async def export_curation(request: CurationExportRequest):
         shutil.copy2(viewer, pack_dir / "viewer.html")
 
     # Bundle curate.py — the batching harness the skill invokes.
-    curate_script = _curate_script_source()
-    if curate_script:
-        dest_curate = pack_dir / "curate.py"
-        shutil.copy2(curate_script, dest_curate)
-        try:
-            dest_curate.chmod(0o755)
-        except OSError:
-            pass
+    for src_fn, dest_name in (
+        (_curate_script_source, "curate.py"),
+    ):
+        src = src_fn()
+        if src:
+            dest = pack_dir / dest_name
+            shutil.copy2(src, dest)
+            try:
+                dest.chmod(0o755)
+            except OSError:
+                pass
 
     # Copy workspace goals.md if it exists (so the curator has something to start with).
     ws = get_workspace_dir()

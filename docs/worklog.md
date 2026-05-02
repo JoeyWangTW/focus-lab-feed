@@ -1,5 +1,16 @@
 # Work Log
 
+## 2026-04-22 - Vibe Scrolling rebrand + gated onboarding
+
+- Renamed app to **Focus Lab — Vibe Scrolling** (browser title, Dock/bundle name, macOS window title, FastAPI title, sidebar logo)
+- Sidebar logo now two-line: "Focus Lab" / "Vibe Scrolling" (small-caps treatment in CSS)
+- New multi-step onboarding (`app/static/js/onboarding.js`) gates the main app until the user has: installed Chromium (if missing), connected ≥1 platform, and confirmed a workspace folder. Steps: welcome → setup → connect → workspace → done. Includes emoji pipeline walkthrough on the welcome step (🔐 → 🌀 → 📦 → 🤖) with staggered fade-in animation.
+- Workspace step defaults to `~/Focus Lab Feed`, supports the native folder picker, and exposes the auto-export toggle with a disk-space note. With auto-export off, the step shows a hint pointing to the Export tab for per-day pulls.
+- Boot logic refactored: `App.init()` decides onboarding vs `App.bootApp()` based on `/setup/status` + `/workspace` state. Returning users (workspace set up, Chromium installed) bypass onboarding entirely.
+- Renamed the "Instructions" tab to **Curate with AI** and rewrote `curation.js` as a focused 4-section workflow: goals editor → pack check → agent picker + copy-paste commands → link to AI Curation tab. Removed now-redundant connect/collect prose now covered by onboarding and dedicated tabs.
+- Export page: added subtitle clarifying "pick a day and the platforms you want", clearer "Choose day and platform" card heading, and a floating bottom-right "Open folder" FAB that reveals the exports dir in Finder.
+- CSS: new `.ob-*` design tokens for onboarding (progress dots, pipeline stages, platform grid, folder/auto-export boxes), `.curate-section-*` for the new Curate with AI numbered sections, `.fab-open-folder` FAB.
+
 ## 2026-03-23 - Desktop app with macOS .app bundle
 
 - Built full desktop app in `app/` directory (FastAPI + vanilla JS SPA + PyWebView)

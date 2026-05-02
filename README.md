@@ -34,7 +34,7 @@ Modern social feeds are engineered to keep you there — the algorithm's goal (y
 
 1. **Collect** — the desktop app opens a real browser under the hood and scrolls Twitter/X, Threads, Instagram, and YouTube on your behalf. No API tokens, no rate limits, just automation of what you'd be doing anyway.
 2. **Curate** — export a *pack* (a folder with `posts.json`, media, and a Markdown skill file). `cd` into it, run any agent you like — Claude Code, Cursor, Codex CLI — and say *"curate this feed."* The agent reads your `goals.md` and writes `posts.filtered.json`.
-3. **Consume** — AirDrop the pack to your phone, open the viewer, and scroll. It's just static HTML — no install, no account, no backend.
+3. **Consume** — open the desktop app's **AI Curation** tab and scroll. The curated pack appears automatically once the agent finishes.
 
 ### The philosophy
 

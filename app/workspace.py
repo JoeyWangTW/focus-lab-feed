@@ -39,7 +39,7 @@ scoring posts 0–100 against those preferences, and producing
 1. The user imports a pack — `cd ./exports/focus-lab-pack-YYYY-MM-DD_HHMMSS/`.
 2. The user says "curate this feed" (or similar).
 3. You use the curator skill to produce `posts.filtered.json` in that pack folder.
-4. The user re-zips the pack and AirDrops it to their phone.
+4. The Focus Lab desktop app's **AI Curation** tab picks it up automatically.
 
 ## Goals resolution
 
@@ -83,8 +83,8 @@ Everything Focus Lab Feed needs lives here.
        claude                         # then say: "curate this feed"
 
    The skill produces `posts.filtered.json` in the pack folder.
-4. **View** — right-click the pack folder in Finder → Compress. AirDrop the
-   zip to your phone, open the Focus Lab Feed viewer, import the zip.
+4. **View** — open the Focus Lab Feed app's **AI Curation** tab. The pack
+   shows up automatically once `posts.filtered.json` is written.
 
 ## Goals
 
@@ -183,6 +183,60 @@ def bootstrap_workspace(workspace: Path, update_app_files: bool = False) -> dict
             updated.append(rel)
 
     return {"workspace": str(ws), "created": created, "updated": updated}
+
+
+def _read_skill_manifest(skill_dir: Path) -> dict | None:
+    """Return the parsed skill.json for a given skill directory, or None."""
+    manifest = skill_dir / "skill.json"
+    if not manifest.exists():
+        return None
+    try:
+        return json.loads(manifest.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def skill_status() -> dict:
+    """Compare the workspace's curator skill version against the shipped version.
+
+    Returns:
+        shipped_version:   what this app build ships
+        workspace_version: what's installed in the user's workspace (None if none)
+        outdated:          True if workspace exists AND versions differ
+        is_shared_source:  True in dev when the workspace == repo root and both
+                           paths resolve to the same dir (no update needed).
+    """
+    shipped = skill_source_dir()
+    shipped_manifest = _read_skill_manifest(shipped) or {}
+    shipped_version = shipped_manifest.get("version")
+
+    ws = get_workspace_dir()
+    if ws is None:
+        return {
+            "shipped_version": shipped_version,
+            "workspace_version": None,
+            "outdated": False,
+            "is_shared_source": False,
+            "workspace_has_skill": False,
+        }
+
+    ws_skill = ws / "skills" / SKILL_NAME
+    is_shared = shipped.exists() and ws_skill.exists() and shipped.resolve() == ws_skill.resolve()
+    ws_manifest = _read_skill_manifest(ws_skill) or {}
+    workspace_version = ws_manifest.get("version")
+
+    return {
+        "shipped_version": shipped_version,
+        "workspace_version": workspace_version,
+        "outdated": bool(
+            shipped_version
+            and workspace_version
+            and shipped_version != workspace_version
+            and not is_shared
+        ),
+        "is_shared_source": is_shared,
+        "workspace_has_skill": workspace_version is not None or ws_skill.exists(),
+    }
 
 
 def save_workspace_dir(workspace: Path) -> None:

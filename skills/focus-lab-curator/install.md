@@ -53,7 +53,7 @@ Paste the contents of `SKILL.md` into your agent's system prompt. The skill is p
 
 ## Where `goals.md` lives
 
-- **Pack-local (preferred):** the curator writes `./goals.md` in the pack folder when you first run it. That file is what gets zipped and AirDropped with the pack.
+- **Pack-local (preferred):** the curator writes `./goals.md` in the pack folder when you first run it.
 - **User-global (fallback):** if you accept when prompted, a copy is also saved to `~/.focuslab/goals.md`. Future packs pick this up automatically when a pack-local `goals.md` is absent.
 
 You can edit `goals.md` by hand at any time. Re-running the skill will pick up your edits.
@@ -62,13 +62,4 @@ You can edit `goals.md` by hand at any time. Re-running the skill will pick up y
 
 ## Output
 
-The skill always writes **one file**: `posts.filtered.json`, next to `posts.json` in the pack folder.
-
-Re-zip the pack folder after filtering:
-
-```bash
-cd ~/Downloads
-zip -r focus-lab-pack-2026-04-16-curated.zip focus-lab-pack-2026-04-16/
-```
-
-Then AirDrop the zip to your phone and import it in the Focus Lab Feed viewer.
+The skill always writes **one file**: `posts.filtered.json`, next to `posts.json` in the pack folder. The Focus Lab Feed app's **AI Curation** tab picks it up automatically.
