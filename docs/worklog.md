@@ -269,3 +269,10 @@ Verified end-to-end on a real job: workspace at `~/Documents/vibe-scrolling-data
 - Wired publish into SKILL.md (auto-publish after filter when publish.env exists), bumped skill to 2.2.0, wrote R2 setup guide in install.md, synced skill copy into the live workspace.
 - Tested: dry-run against real job 2026-07-12/job_132135 (109 posts; 910 MB media → 499 MB bundle, 1 too-large link-out, 31 budget fallbacks) and Playwright smoke test of the preview (all posts render, no JS errors).
 - Noticed: all platforms' downloaded media lands in `<job>/linkedin/media/` — collector media routing bug, logged in status.md.
+
+## 2026-07-12 - Publisher made zero-dependency (branch feature/publish-feed)
+
+- Replaced boto3 with a stdlib-only R2Client in publish.py: SigV4 signing (hmac/hashlib) + urllib for PUT/GET/HEAD/DELETE/LIST — the curator skill must run without installing packages, and now publishing honors that too.
+- Verified the signer byte-for-byte against botocore (dev-only cross-check) across PUT with cache headers, keys with spaces/parens, list queries with continuation tokens.
+- End-to-end test against a fake local S3 server: media HEAD→PUT, posts.json/index.html upload, feed/index.json read-modify-write, retention pruning via LIST+DELETE. All requests signed, exit 0.
+- Removed boto3 from requirements.txt, install.md, SKILL.md; re-synced skill into the live workspace.

@@ -308,8 +308,9 @@ Rules:
 
 - **Run it, don't reimplement it.** Same policy as `curate.py`.
 - **Publish only after a successful filter** — it uploads `posts.filtered.json`, never raw collections.
-- If it fails on missing credentials or a missing `boto3`, relay its error message
-  verbatim — the fix (filling in `publish.env`, `pip install boto3`) belongs to the user.
+- If it fails on missing credentials, relay its error message verbatim — filling
+  in `publish.env` belongs to the user. (The script has no dependencies beyond
+  the Python standard library, so there is never anything to install.)
 - `--dry-run` builds `<workspace>/publish_preview/` without uploading — useful when
   the user wants to sanity-check before their first real publish.
 - Never print the contents of `publish.env` (it holds the R2 secret key). Refer to

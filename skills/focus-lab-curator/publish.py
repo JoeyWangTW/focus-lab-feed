@@ -42,18 +42,26 @@ Typical use, from the workspace root:
     python3 skills/focus-lab-curator/publish.py --dry-run    # build publish_preview/ only
     python3 skills/focus-lab-curator/publish.py --job 2026-07-12/job_132135
 
-Requirements: Python 3.9+; boto3 for real uploads (`pip install boto3`).
-`--dry-run` needs no boto3 and no publish.env.
+Requirements: Python 3.9+ only — no third-party packages. Uploads use a
+built-in SigV4-signed S3 client (R2 is S3-compatible). `--dry-run` needs no
+publish.env either.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
+import hmac
 import json
 import mimetypes
 import re
 import shutil
 import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -263,60 +271,135 @@ def linkout(post: dict, size: int | None, reason: str) -> dict:
     return {"type": "linkout", "kind": "video", "url": url, "label": label, "reason": reason}
 
 
-# ----- R2 client ----------------------------------------------------------------
+# ----- R2 client (stdlib-only S3 SigV4) -------------------------------------------
+#
+# The skill must run without installing anything, so no boto3. R2 speaks the
+# S3 API, and the five calls we need (PUT/GET/HEAD/DELETE/LIST) fit in a small
+# SigV4-signed urllib client.
 
-def make_client(cfg: dict):
-    try:
-        import boto3
-    except ImportError:
-        sys.exit(
-            "error: boto3 is not installed (needed for uploads).\n"
-            "Install it with: pip install boto3\n"
-            "Or run with --dry-run to build a local preview without uploading."
+def _uri_encode(s: str, safe: str = "") -> str:
+    # SigV4 canonical encoding: RFC 3986, space as %20 (never '+').
+    return urllib.parse.quote(s, safe="-_.~" + safe)
+
+
+class R2Client:
+    def __init__(self, cfg: dict):
+        endpoint = cfg["R2_ENDPOINT"].rstrip("/")
+        parsed = urllib.parse.urlparse(endpoint)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            sys.exit(f"error: R2_ENDPOINT doesn't look like a URL: {endpoint!r}")
+        self.scheme = parsed.scheme
+        self.host = parsed.netloc
+        self.bucket = cfg["R2_BUCKET"]
+        self.access_key = cfg["R2_ACCESS_KEY_ID"]
+        self.secret_key = cfg["R2_SECRET_ACCESS_KEY"]
+        self.region = "auto"
+
+    def _authorization(self, method: str, path: str, canonical_query: str,
+                       headers: dict, payload_hash: str, amz_date: str) -> str:
+        datestamp = amz_date[:8]
+        lower = {k.lower(): str(v).strip() for k, v in headers.items()}
+        signed_headers = ";".join(sorted(lower))
+        canonical_headers = "".join(f"{k}:{lower[k]}\n" for k in sorted(lower))
+        canonical_request = "\n".join(
+            [method, path, canonical_query, canonical_headers, signed_headers, payload_hash]
         )
-    return boto3.client(
-        "s3",
-        endpoint_url=cfg["R2_ENDPOINT"],
-        aws_access_key_id=cfg["R2_ACCESS_KEY_ID"],
-        aws_secret_access_key=cfg["R2_SECRET_ACCESS_KEY"],
-        region_name="auto",
-    )
+        scope = f"{datestamp}/{self.region}/s3/aws4_request"
+        string_to_sign = "\n".join([
+            "AWS4-HMAC-SHA256", amz_date, scope,
+            hashlib.sha256(canonical_request.encode()).hexdigest(),
+        ])
+        key = f"AWS4{self.secret_key}".encode()
+        for part in (datestamp, self.region, "s3", "aws4_request"):
+            key = hmac.new(key, part.encode(), hashlib.sha256).digest()
+        signature = hmac.new(key, string_to_sign.encode(), hashlib.sha256).hexdigest()
+        return (
+            f"AWS4-HMAC-SHA256 Credential={self.access_key}/{scope}, "
+            f"SignedHeaders={signed_headers}, Signature={signature}"
+        )
 
+    def _request(self, method: str, key: str = "", query: dict | None = None,
+                 body: bytes = b"", extra_headers: dict | None = None,
+                 retries: int = 3) -> tuple[int, bytes]:
+        """Signed request. Returns (status, body); 404 comes back as a status,
+        transport errors and 5xx are retried then raised."""
+        path = "/" + _uri_encode(self.bucket, safe="/") + (
+            "/" + _uri_encode(key, safe="/") if key else ""
+        )
+        canonical_query = "&".join(
+            f"{_uri_encode(k)}={_uri_encode(v)}" for k, v in sorted((query or {}).items())
+        )
+        payload_hash = hashlib.sha256(body).hexdigest()
+        url = f"{self.scheme}://{self.host}{path}"
+        if canonical_query:
+            url += "?" + canonical_query
 
-def object_exists(client, bucket: str, key: str) -> bool:
-    try:
-        client.head_object(Bucket=bucket, Key=key)
-        return True
-    except Exception:
-        return False
+        last_err: Exception | None = None
+        for attempt in range(retries):
+            amz_date = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            headers = {
+                "host": self.host,
+                "x-amz-date": amz_date,
+                "x-amz-content-sha256": payload_hash,
+                **(extra_headers or {}),
+            }
+            headers["Authorization"] = self._authorization(
+                method, path, canonical_query,
+                {k: v for k, v in headers.items() if k.lower() != "authorization"},
+                payload_hash, amz_date,
+            )
+            req = urllib.request.Request(url, data=body if body else None,
+                                         method=method, headers=headers)
+            try:
+                with urllib.request.urlopen(req, timeout=120) as resp:
+                    return resp.status, resp.read()
+            except urllib.error.HTTPError as e:
+                if e.code < 500:
+                    return e.code, e.read()
+                last_err = e
+            except urllib.error.URLError as e:
+                last_err = e
+            if attempt < retries - 1:
+                time.sleep(2 ** attempt)
+        raise RuntimeError(f"R2 {method} {path} failed after {retries} tries: {last_err}")
 
+    def put(self, key: str, body: bytes, content_type: str, cache_control: str) -> None:
+        status, out = self._request("PUT", key, body=body, extra_headers={
+            "content-type": content_type, "cache-control": cache_control,
+        })
+        if status not in (200, 201):
+            raise RuntimeError(f"PUT {key} → HTTP {status}: {out[:300]!r}")
 
-def get_json(client, bucket: str, key: str) -> dict | None:
-    try:
-        body = client.get_object(Bucket=bucket, Key=key)["Body"].read()
-        return json.loads(body)
-    except Exception:
-        return None
+    def get(self, key: str) -> bytes | None:
+        status, out = self._request("GET", key)
+        return out if status == 200 else None
 
+    def head(self, key: str) -> bool:
+        status, _ = self._request("HEAD", key)
+        return status == 200
 
-def put_json(client, bucket: str, key: str, payload: dict) -> None:
-    client.put_object(
-        Bucket=bucket, Key=key,
-        Body=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        ContentType="application/json",
-        CacheControl="no-cache",
-    )
+    def delete(self, key: str) -> None:
+        self._request("DELETE", key)  # 204 on success, 404 is fine too
 
-
-def delete_prefix(client, bucket: str, prefix: str) -> int:
-    deleted = 0
-    paginator = client.get_paginator("list_objects_v2")
-    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
-        keys = [{"Key": o["Key"]} for o in page.get("Contents", [])]
-        if keys:
-            client.delete_objects(Bucket=bucket, Delete={"Objects": keys})
-            deleted += len(keys)
-    return deleted
+    def list_keys(self, prefix: str) -> list[str]:
+        keys: list[str] = []
+        token: str | None = None
+        while True:
+            query = {"list-type": "2", "prefix": prefix}
+            if token:
+                query["continuation-token"] = token
+            status, out = self._request("GET", "", query=query)
+            if status != 200:
+                raise RuntimeError(f"LIST {prefix} → HTTP {status}: {out[:300]!r}")
+            root = ET.fromstring(out)
+            ns = root.tag.split("}")[0] + "}" if root.tag.startswith("{") else ""
+            for el in root.findall(f"{ns}Contents/{ns}Key"):
+                keys.append(el.text or "")
+            if (root.findtext(f"{ns}IsTruncated") or "").lower() != "true":
+                return keys
+            token = root.findtext(f"{ns}NextContinuationToken")
+            if not token:
+                return keys
 
 
 # ----- Main ----------------------------------------------------------------------
@@ -421,45 +504,47 @@ def main() -> int:
         )
         return 0
 
-    client = make_client(cfg)
-    bucket = cfg["R2_BUCKET"]
+    client = R2Client(cfg)
 
     # Media first — if the run dies midway, posts.json/index.json haven't
     # flipped yet and the previous publish stays intact.
     uploaded = skipped = 0
     for i, (src, name, size) in enumerate(uploads, 1):
         key = f"feed/{day}/media/{name}"
-        if object_exists(client, bucket, key):
+        if client.head(key):
             skipped += 1
         else:
             ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
-            client.upload_file(
-                str(src), bucket, key,
-                ExtraArgs={"ContentType": ctype,
-                           "CacheControl": "public, max-age=31536000, immutable"},
-            )
+            client.put(key, src.read_bytes(), ctype,
+                       "public, max-age=31536000, immutable")
             uploaded += 1
         if i % 10 == 0 or i == len(uploads):
             log(f"  media {i}/{len(uploads)} (new: {uploaded}, already there: {skipped})")
 
-    put_json(client, bucket, f"feed/{day}/posts.json", payload)
-    client.upload_file(
-        str(VIEWER_TEMPLATE), bucket, "index.html",
-        ExtraArgs={"ContentType": "text/html; charset=utf-8", "CacheControl": "no-cache"},
-    )
+    client.put(f"feed/{day}/posts.json",
+               json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+               "application/json", "no-cache")
+    client.put("index.html", VIEWER_TEMPLATE.read_bytes(),
+               "text/html; charset=utf-8", "no-cache")
 
-    index = get_json(client, bucket, "feed/index.json") or {"days": []}
+    raw_index = client.get("feed/index.json")
+    index = json.loads(raw_index) if raw_index else {"days": []}
     upsert_day(index, day_entry)
 
     # Retention: drop days older than the cutoff from bucket + index.
     cutoff = (datetime.now(timezone.utc) - timedelta(days=retention_days)).strftime("%Y-%m-%d")
     stale = [d for d in index["days"] if d["day"] < cutoff]
     for entry in stale:
-        n = delete_prefix(client, bucket, f"feed/{entry['day']}/")
+        n = 0
+        for k in client.list_keys(f"feed/{entry['day']}/"):
+            client.delete(k)
+            n += 1
         log(f"  pruned {entry['day']} ({n} objects)")
     index["days"] = [d for d in index["days"] if d["day"] >= cutoff]
     index["updated_at"] = payload["publish_metadata"]["published_at"]
-    put_json(client, bucket, "feed/index.json", index)
+    client.put("feed/index.json",
+               json.dumps(index, ensure_ascii=False).encode("utf-8"),
+               "application/json", "no-cache")
 
     url = cfg["PUBLIC_BASE_URL"].rstrip("/") + "/index.html"
     log(f"done — {uploaded} media uploaded, {skipped} already present, {len(stale)} days pruned")

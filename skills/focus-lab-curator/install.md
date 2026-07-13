@@ -88,7 +88,8 @@ PUBLIC_BASE_URL=https://pub-xxxxxxxx.r2.dev
 # RETENTION_DAYS=14
 ```
 
-5. `pip install boto3` (the uploader uses the S3 API).
+That's all — the uploader talks to R2's S3 API with Python's standard library,
+so there is nothing to install.
 
 From then on the curator publishes automatically after each filter and reports
 your feed URL: `PUBLIC_BASE_URL/index.html`. Bookmark it on your phone's home

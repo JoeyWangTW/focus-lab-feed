@@ -10,11 +10,12 @@
 - **Free-tier guards:** media included in score order until `DAILY_BUDGET_MB` (500) is spent; videos over `MAX_VIDEO_MB` (50) and all YouTube videos become tap-through link-out cards to the original post; days older than `RETENTION_DAYS` (14) pruned from the bucket. Worst case ≈ 7 GB vs the 10 GB free tier.
 - **Hosted viewer** (`skills/focus-lab-curator/hosted.html`): adapted from `viewer/mobile.html` — fetches `feed/index.json` + per-day `posts.json` from the same origin (no CORS), day picker, `hosted_media` rendering with link-out cards, per-day scroll anchor memory. Verified with Playwright against the real 2026-07-12 job (109 posts, 500 MB media, zero JS errors).
 - `--dry-run` builds `<workspace>/publish_preview/` (symlinked media) for local testing without credentials.
-- Setup guide in skill `install.md` § Publishing; `publish.env` + `publish_preview/` gitignored; boto3 added to requirements.
+- Setup guide in skill `install.md` § Publishing; `publish.env` + `publish_preview/` gitignored.
+- **Zero-dependency uploader:** the R2 client is stdlib-only (SigV4 signing via hmac/hashlib + urllib) so the skill keeps its "never install anything" rule. Signer verified byte-for-byte against botocore on 5 request shapes; full publish flow (upload, index update, retention prune) exercised against a fake local S3 server.
 
 ### Waiting on user
 
-- Cloudflare account + R2 bucket + API token → fill `<workspace>/publish.env` (see install.md), `pip install boto3`, then the first real publish.
+- Cloudflare account + R2 bucket + API token → fill `<workspace>/publish.env` (see install.md), then the first real publish. Nothing to install.
 
 ### Observed during work (not yet fixed)
 
