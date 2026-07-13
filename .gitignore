@@ -13,3 +13,6 @@ scripts/ralph/.last-branch
 /exports/
 /goals.md
 /AGENTS.md
+# R2 credentials for feed publishing (workspace-local, never commit)
+/publish.env
+publish_preview/

@@ -260,3 +260,12 @@ Verified end-to-end on a real job: workspace at `~/Documents/vibe-scrolling-data
 - Created `tests/test_run_summary.py` with 11 tests: file creation, appending, location, field preservation, pretty-print, warnings, empty warnings, printed output, warning display, no-warnings omission, header
 - All 76 tests pass (12 parser + 9 dedup + 20 scroller + 12 storage + 12 media + 11 summary)
 - Files changed: src/storage.py, src/collector.py, tests/test_run_summary.py, prd.json, docs/status.md, docs/worklog.md
+
+## 2026-07-12 - Feed publishing to Cloudflare R2 (branch feature/publish-feed)
+
+- Added `skills/focus-lab-curator/publish.py`: uploads a curated job to an R2 bucket (S3 API / boto3) — hosted viewer at `index.html`, `feed/<day>/posts.json`, `feed/<day>/media/*`, `feed/index.json` day index. Media-first upload order so a failed run never breaks the previous publish; per-day re-publish skips already-uploaded media.
+- Free-tier policy: score-ordered media inclusion up to DAILY_BUDGET_MB (500), MAX_VIDEO_MB (50) per-file video cap, YouTube videos never uploaded (always link out), RETENTION_DAYS (14) bucket pruning. Config + credentials in `<workspace>/publish.env`.
+- Added `skills/focus-lab-curator/hosted.html`: phone viewer adapted from viewer/mobile.html — same-origin fetch instead of zip import, day picker, hosted_media link-out cards, linkedin badge, per-day scroll anchor.
+- Wired publish into SKILL.md (auto-publish after filter when publish.env exists), bumped skill to 2.2.0, wrote R2 setup guide in install.md, synced skill copy into the live workspace.
+- Tested: dry-run against real job 2026-07-12/job_132135 (109 posts; 910 MB media → 499 MB bundle, 1 too-large link-out, 31 budget fallbacks) and Playwright smoke test of the preview (all posts render, no JS errors).
+- Noticed: all platforms' downloaded media lands in `<job>/linkedin/media/` — collector media routing bug, logged in status.md.

@@ -61,6 +61,58 @@ If `goals.md` is missing or essentially empty, the skill runs a short interview 
 
 ---
 
+## Publishing to your phone (optional)
+
+With publishing configured, every curation ends by uploading the feed to a
+Cloudflare R2 bucket — so your phone scrolls a URL instead of importing zip packs.
+
+One-time setup (~10 minutes):
+
+1. Create a Cloudflare account and enable **R2** (asks for a credit card; the
+   free tier is 10 GB storage with zero egress fees — nothing is charged under it).
+2. Create a bucket (e.g. `focus-lab-feed`) and enable **public access** via its
+   `r2.dev` subdomain (bucket → Settings → Public access). Note the
+   `https://pub-….r2.dev` URL.
+3. Create an R2 API token (**Object Read & Write**, scoped to that bucket).
+4. Write `<workspace>/publish.env`:
+
+```
+R2_ENDPOINT=https://<account_id>.r2.cloudflarestorage.com
+R2_BUCKET=focus-lab-feed
+R2_ACCESS_KEY_ID=<access key id>
+R2_SECRET_ACCESS_KEY=<secret access key>
+PUBLIC_BASE_URL=https://pub-xxxxxxxx.r2.dev
+# optional (defaults shown):
+# MAX_VIDEO_MB=50
+# DAILY_BUDGET_MB=500
+# RETENTION_DAYS=14
+```
+
+5. `pip install boto3` (the uploader uses the S3 API).
+
+From then on the curator publishes automatically after each filter and reports
+your feed URL: `PUBLIC_BASE_URL/index.html`. Bookmark it on your phone's home
+screen.
+
+How it stays inside the free tier: media uploads in score order until
+`DAILY_BUDGET_MB` is spent; videos over `MAX_VIDEO_MB` (and all YouTube videos)
+become tap-through links to the original post; days older than `RETENTION_DAYS`
+are pruned. Worst case ≈ 500 MB × 14 days = 7 GB.
+
+**Privacy note:** an `r2.dev` public bucket is reachable by anyone who has the
+URL (it's unguessable, but it is public). For real access control, put the
+bucket behind a custom domain and enable Cloudflare Access on it (free for
+personal use). Keep `publish.env` out of git — it holds your R2 secret.
+
+Preview without uploading:
+
+```bash
+python3 skills/focus-lab-curator/publish.py --dry-run
+python3 -m http.server 8899 -d publish_preview   # then open :8899/index.html
+```
+
+---
+
 ## Output
 
 The skill always writes **one file** per job:

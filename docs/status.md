@@ -1,8 +1,24 @@
 # Project Status
 
-**Last updated:** 2026-05-02
+**Last updated:** 2026-07-12
 
-**Current state:** Desktop app rebranded to **Focus Lab — Vibe Scrolling** with a proper gated onboarding, a focused Curate-with-AI tab, and a clarified Export page. Multi-platform collection working (Twitter, Threads, Instagram, YouTube, LinkedIn).
+**Current state:** Desktop app rebranded to **Focus Lab — Vibe Scrolling** with a proper gated onboarding, a focused Curate-with-AI tab, and a clarified Export page. Multi-platform collection working (Twitter, Threads, Instagram, YouTube, LinkedIn). Curator skill can now **publish the curated feed to Cloudflare R2** for phone scrolling.
+
+## Recently Completed (2026-07-12) — branch `feature/publish-feed`
+
+- **Feed publishing to Cloudflare R2:** `skills/focus-lab-curator/publish.py` uploads a curated job (hosted viewer + posts.json + media) to an R2 bucket via the S3 API, so the daily feed is scrollable from a phone URL. Wired into the curator skill: when `<workspace>/publish.env` exists, the skill publishes automatically after filtering.
+- **Free-tier guards:** media included in score order until `DAILY_BUDGET_MB` (500) is spent; videos over `MAX_VIDEO_MB` (50) and all YouTube videos become tap-through link-out cards to the original post; days older than `RETENTION_DAYS` (14) pruned from the bucket. Worst case ≈ 7 GB vs the 10 GB free tier.
+- **Hosted viewer** (`skills/focus-lab-curator/hosted.html`): adapted from `viewer/mobile.html` — fetches `feed/index.json` + per-day `posts.json` from the same origin (no CORS), day picker, `hosted_media` rendering with link-out cards, per-day scroll anchor memory. Verified with Playwright against the real 2026-07-12 job (109 posts, 500 MB media, zero JS errors).
+- `--dry-run` builds `<workspace>/publish_preview/` (symlinked media) for local testing without credentials.
+- Setup guide in skill `install.md` § Publishing; `publish.env` + `publish_preview/` gitignored; boto3 added to requirements.
+
+### Waiting on user
+
+- Cloudflare account + R2 bucket + API token → fill `<workspace>/publish.env` (see install.md), `pip install boto3`, then the first real publish.
+
+### Observed during work (not yet fixed)
+
+- **All platforms' media downloads land in `<job>/linkedin/media/`** — `local_media_paths` for x/instagram/threads posts point into the linkedin subfolder. Harmless for viewer/publisher (paths resolve), but the collector's media routing looks buggy.
 
 ## Recently Completed (2026-05-02)
 

@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Focus Lab Feed</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌱</text></svg>">
+<style>
+  :root {
+    --bg: #0f1419;
+    --bg-elev: #15202b;
+    --border: #2c3640;
+    --text: #e7e9ea;
+    --text-dim: #8899a6;
+    --accent: #1da1f2;
+    --danger: #f4212e;
+    --radius: 14px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  [hidden] { display: none !important; }
+  html, body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { max-width: 640px; margin: 0 auto; min-height: 100dvh; padding-bottom: env(safe-area-inset-bottom); }
+
+  header.feed-head {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(15,20,25,0.85);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px;
+    padding-top: calc(12px + env(safe-area-inset-top));
+  }
+  header.feed-head .title { flex: 1; min-width: 0; }
+  header.feed-head .title .pack { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  header.feed-head .title .stats { font-size: 12px; color: var(--text-dim); }
+  #day-select {
+    background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text);
+    font-size: 13px; font-weight: 600; padding: 6px 10px; border-radius: 999px;
+    -webkit-appearance: none; appearance: none;
+  }
+
+  .status { padding: 60px 20px; text-align: center; color: var(--text-dim); font-size: 14px; }
+  .status.error { color: var(--danger); }
+
+  .post { padding: 16px; border-bottom: 1px solid var(--border); }
+  .post-header { display: flex; gap: 10px; align-items: baseline; margin-bottom: 8px; }
+  .author { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .handle { color: var(--text-dim); font-size: 14px; }
+  .time { color: var(--text-dim); font-size: 12px; margin-left: auto; white-space: nowrap; }
+  .badge { font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+  .badge.x, .badge.twitter { background: rgba(29,161,242,0.15); color: var(--accent); }
+  .badge.threads { background: rgba(255,255,255,0.08); color: #ddd; }
+  .badge.instagram { background: rgba(225,48,108,0.15); color: #e1306c; }
+  .badge.youtube { background: rgba(255,0,0,0.15); color: #ff4444; }
+  .badge.linkedin { background: rgba(10,102,194,0.18); color: #4a9eda; }
+  .repost-note { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; display: flex; align-items: center; gap: 4px; }
+  .score { margin-left: 6px; padding: 1px 6px; border-radius: 6px; font-size: 11px; background: rgba(29,161,242,0.12); color: var(--accent); font-weight: 600; }
+
+  .post-text { font-size: 15px; line-height: 1.5; margin-bottom: 10px; word-wrap: break-word; white-space: pre-wrap; }
+  .post-text a { color: var(--accent); text-decoration: none; }
+  .filter-reason { font-size: 12px; color: var(--text-dim); font-style: italic; margin-bottom: 8px; padding: 6px 10px; background: rgba(29,161,242,0.04); border-left: 2px solid var(--accent); border-radius: 0 6px 6px 0; }
+
+  .media-wrap { margin-bottom: 10px; border-radius: var(--radius); overflow: hidden; background: #000; }
+  .media-wrap.single img, .media-wrap.single video { width: 100%; display: block; max-height: 75vh; object-fit: contain; }
+  .carousel { display: flex; gap: 3px; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .carousel::-webkit-scrollbar { display: none; }
+  .carousel .slide { flex: 0 0 100%; scroll-snap-align: start; background: #000; display: flex; align-items: center; justify-content: center; }
+  .carousel .slide img, .carousel .slide video { width: 100%; display: block; max-height: 75vh; object-fit: contain; }
+
+  .linkout { display: block; position: relative; text-decoration: none; background: #000; min-height: 120px; width: 100%; }
+  .linkout img { width: 100%; display: block; max-height: 55vh; object-fit: cover; opacity: 0.55; }
+  .linkout .overlay {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 8px; padding: 20px; text-align: center;
+  }
+  .linkout .play {
+    width: 54px; height: 54px; border-radius: 50%;
+    background: rgba(29,161,242,0.9); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; padding-left: 4px;
+  }
+  .linkout .label { color: var(--text); font-size: 14px; font-weight: 600; text-shadow: 0 1px 4px rgba(0,0,0,0.8); }
+
+  .quoted { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 10px; background: rgba(255,255,255,0.02); }
+  .quoted .q-header { font-size: 13px; margin-bottom: 4px; display: flex; gap: 6px; align-items: baseline; }
+  .quoted .q-author { font-weight: 700; }
+  .quoted .q-handle { color: var(--text-dim); font-size: 12px; }
+  .quoted .q-text { font-size: 14px; line-height: 1.4; color: var(--text); white-space: pre-wrap; word-wrap: break-word; }
+
+  .stats { display: flex; gap: 20px; color: var(--text-dim); font-size: 13px; margin-top: 8px; }
+  .stats span { display: flex; align-items: center; gap: 5px; }
+
+  .post-link { display: inline-block; margin-top: 8px; color: var(--text-dim); font-size: 12px; text-decoration: none; }
+  .post-link:hover { color: var(--accent); }
+
+  .missing-media { padding: 20px; text-align: center; color: var(--text-dim); font-size: 13px; }
+  img.remote-failed { display: none; }
+
+  .end-note { padding: 40px 20px 60px; text-align: center; color: var(--text-dim); font-size: 13px; }
+
+  video { cursor: pointer; }
+</style>
+</head>
+<body>
+
+<header class="feed-head">
+  <div class="title">
+    <div class="pack">Focus Lab Feed</div>
+    <div class="stats" id="feed-stats">loading…</div>
+  </div>
+  <select id="day-select" hidden></select>
+</header>
+<div id="status" class="status">Loading feed…</div>
+<div id="posts"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  const state = { day: null, posts: [] };
+  const $ = (id) => document.getElementById(id);
+  const base = () => `feed/${state.day}/`;
+
+  // ---------------- Post anchor memory (per day) ----------------
+  const anchorKey = () => `focuslab:anchor:${state.day}`;
+
+  function findAnchorPostId() {
+    const posts = document.querySelectorAll('#posts .post');
+    const HEADER_OFFSET = 80;
+    for (const p of posts) {
+      if (p.getBoundingClientRect().bottom > HEADER_OFFSET) return p.dataset.id;
+    }
+    return null;
+  }
+  function saveAnchor() {
+    if (!state.day) return;
+    const anchorId = findAnchorPostId();
+    if (!anchorId) return;
+    try { localStorage.setItem(anchorKey(), anchorId); } catch (e) {}
+  }
+  function restoreAnchor() {
+    let id = null;
+    try { id = localStorage.getItem(anchorKey()); } catch (e) { return; }
+    if (!id) return;
+    const target = document.querySelector(`.post[data-id="${CSS.escape(id)}"]`);
+    if (!target) return;
+    const scroll = () => target.scrollIntoView({ block: 'start', behavior: 'auto' });
+    requestAnimationFrame(scroll);
+    setTimeout(scroll, 300);
+    setTimeout(scroll, 1000);
+  }
+
+  // ---------------- Rendering ----------------
+  function escapeHTML(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function linkify(text) {
+    const escaped = escapeHTML(text);
+    return escaped.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  }
+  function relTime(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    const s = Math.max(1, Math.floor((Date.now() - d.getTime()) / 1000));
+    if (s < 60) return s + 's';
+    if (s < 3600) return Math.floor(s / 60) + 'm';
+    if (s < 86400) return Math.floor(s / 3600) + 'h';
+    if (s < 2592000) return Math.floor(s / 86400) + 'd';
+    return d.toISOString().slice(0, 10);
+  }
+  function formatNum(n) {
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+    if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
+    return String(n);
+  }
+
+  function mediaElement(item) {
+    if (!item) return `<div class="missing-media">Media unavailable</div>`;
+    if (item.type === 'video') {
+      return `<video src="${escapeHTML(base() + item.src)}" playsinline muted loop preload="metadata" controls></video>`;
+    }
+    if (item.type === 'image') {
+      const src = item.remote ? item.src : base() + item.src;
+      // Remote fallbacks are platform CDN links that may have expired — hide on error.
+      const onerr = item.remote ? ` onerror="this.classList.add('remote-failed')"` : '';
+      return `<img src="${escapeHTML(src)}" loading="lazy" alt=""${onerr}>`;
+    }
+    if (item.type === 'linkout') {
+      const poster = item.poster ? `<img src="${escapeHTML(base() + item.poster)}" alt="">` : '';
+      return `<a class="linkout" href="${escapeHTML(item.url)}" target="_blank" rel="noopener">
+        ${poster}
+        <div class="overlay"><div class="play">▶</div><div class="label">${escapeHTML(item.label || 'Watch at source')}</div></div>
+      </a>`;
+    }
+    return '';
+  }
+
+  function renderMedia(post) {
+    let items = post.hosted_media;
+    if (!Array.isArray(items)) {
+      // Older posts.json without hosted_media — best effort via remote URLs.
+      items = (post.media_urls || []).map(u => ({ type: 'image', src: u, remote: true }));
+    }
+    items = items.filter(Boolean);
+    if (items.length === 0) return '';
+    if (items.length === 1) {
+      return `<div class="media-wrap single">${mediaElement(items[0])}</div>`;
+    }
+    const slides = items.map(it => `<div class="slide">${mediaElement(it)}</div>`).join('');
+    return `<div class="media-wrap"><div class="carousel">${slides}</div></div>`;
+  }
+
+  function renderQuoted(q) {
+    if (!q) return '';
+    const name = escapeHTML(q.author_name || q.author_handle || '');
+    const handle = q.author_handle ? '@' + escapeHTML(q.author_handle) : '';
+    const text = linkify(q.text || '');
+    return `<div class="quoted">
+      <div class="q-header"><span class="q-author">${name}</span><span class="q-handle">${handle}</span></div>
+      <div class="q-text">${text}</div>
+    </div>`;
+  }
+
+  function renderPost(post) {
+    const platform = (post.platform || '').toLowerCase();
+    const badgeClass = ['x','twitter','threads','instagram','youtube','linkedin'].includes(platform) ? platform : '';
+    const name = escapeHTML(post.author_name || post.author_handle || '');
+    const handle = post.author_handle ? '@' + escapeHTML(post.author_handle) : '';
+    const time = relTime(post.created_at);
+    const repostNote = post.is_repost && post.original_author
+      ? `<div class="repost-note">↻ reposted by @${escapeHTML(post.original_author)}</div>`
+      : '';
+    const score = typeof post.score === 'number' ? `<span class="score">${post.score}</span>` : '';
+    const reason = post.filter_reason ? `<div class="filter-reason">${escapeHTML(post.filter_reason)}</div>` : '';
+    const text = post.text ? `<div class="post-text">${linkify(post.text)}</div>` : '';
+    const media = renderMedia(post);
+    const quoted = renderQuoted(post.quoted_post);
+    const stats = `<div class="stats">
+      ${post.likes ? `<span>♥ ${formatNum(post.likes)}</span>` : ''}
+      ${post.reposts ? `<span>↻ ${formatNum(post.reposts)}</span>` : ''}
+      ${post.replies ? `<span>💬 ${formatNum(post.replies)}</span>` : ''}
+    </div>`;
+    const link = post.url ? `<a class="post-link" href="${escapeHTML(post.url)}" target="_blank" rel="noopener">open on ${platform || 'source'} →</a>` : '';
+    return `<article class="post" data-id="${escapeHTML(post.id || '')}">
+      ${repostNote}
+      <div class="post-header">
+        ${badgeClass ? `<span class="badge ${badgeClass}">${platform}</span>` : ''}
+        <span class="author">${name}</span>
+        <span class="handle">${handle}</span>
+        <span class="time">${time}</span>
+        ${score}
+      </div>
+      ${reason}
+      ${text}
+      ${media}
+      ${quoted}
+      ${stats}
+      ${link}
+    </article>`;
+  }
+
+  function setupVideoAutoplay() {
+    const vids = document.querySelectorAll('#posts video');
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        const v = e.target;
+        if (e.isIntersecting && e.intersectionRatio > 0.6) {
+          v.play().catch(() => {});
+        } else {
+          v.pause();
+        }
+      }
+    }, { threshold: [0, 0.6, 1] });
+    for (const v of vids) {
+      io.observe(v);
+      v.addEventListener('click', () => {
+        v.muted = !v.muted;
+        if (v.paused) v.play().catch(() => {});
+      });
+    }
+  }
+
+  // ---------------- Loading ----------------
+  function showStatus(msg, isError) {
+    const el = $('status');
+    el.textContent = msg;
+    el.classList.toggle('error', !!isError);
+    el.hidden = false;
+  }
+
+  async function fetchJSON(path) {
+    const r = await fetch(path, { cache: 'no-cache' });
+    if (!r.ok) throw new Error(`${path}: HTTP ${r.status}`);
+    return r.json();
+  }
+
+  async function loadDay(day) {
+    state.day = day;
+    showStatus('Loading feed…');
+    $('posts').innerHTML = '';
+    let data;
+    try {
+      data = await fetchJSON(`feed/${day}/posts.json`);
+    } catch (e) {
+      showStatus(`Couldn't load ${day}: ${e.message}`, true);
+      return;
+    }
+    state.posts = data.posts || [];
+    const meta = data.filter_metadata || {};
+    const pub = data.publish_metadata || {};
+    $('feed-stats').textContent =
+      `${day} · ${state.posts.length} posts` + (pub.media_mb ? ` · ${pub.media_mb} MB media` : '');
+    $('status').hidden = true;
+    $('posts').innerHTML =
+      (state.posts.map(renderPost).join('') || '<div class="status">No posts this day.</div>') +
+      `<div class="end-note">That's your feed for ${day}. Go live your life. 🌱</div>`;
+    window.scrollTo(0, 0);
+    setupVideoAutoplay();
+    restoreAnchor();
+  }
+
+  async function init() {
+    let anchorTimer = null;
+    window.addEventListener('scroll', () => {
+      if (anchorTimer) return;
+      anchorTimer = setTimeout(() => { anchorTimer = null; saveAnchor(); }, 400);
+    }, { passive: true });
+
+    let index;
+    try {
+      index = await fetchJSON('feed/index.json');
+    } catch (e) {
+      showStatus(`Couldn't load feed index: ${e.message}`, true);
+      return;
+    }
+    const days = (index.days || []).map(d => d.day);
+    if (days.length === 0) {
+      showStatus('No published days yet. Run the curator with publishing enabled.');
+      return;
+    }
+    const select = $('day-select');
+    select.innerHTML = days.map(d => `<option value="${d}">${d}</option>`).join('');
+    select.hidden = days.length < 2;
+    select.onchange = () => loadDay(select.value);
+    await loadDay(days[0]);
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+</body>
+</html>

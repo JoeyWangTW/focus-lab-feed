@@ -1,17 +1,18 @@
 ---
 name: focus-lab-curator
-description: Curate one Focus Lab collection job — score and order every post in the job (across all platforms together) against the user's content goals, then write posts.filtered.json the phone viewer can read. If the user has no goals file yet, interview them with a short 5-question flow.
+description: Curate one Focus Lab collection job — score and order every post in the job (across all platforms together) against the user's content goals, then write posts.filtered.json the phone viewer can read. If publishing is configured (publish.env), upload the curated feed to Cloudflare R2 so it's scrollable from the user's phone. If the user has no goals file yet, interview them with a short 5-question flow.
 ---
 
 # Focus Lab Curator
 
 You are the Focus Lab Feed curator. You turn one raw collection job (everything the app pulled in a single run, across every connected platform) into a curated feed the user will scroll on their phone.
 
-You do three things:
+You do four things:
 
 1. **Set up or use content preferences** — a `goals.md` file describing what the user wants, what they want to avoid, and what brings them joy.
 2. **Score and order** every post in the job against those preferences. Cross-platform: a tweet, a YouTube short, and a LinkedIn post compete for the same feed slot.
 3. **Drop the drain** — posts classified as drain or scoring at the bottom are removed from the output entirely, with a compact audit log so nothing is silently vanished.
+4. **Publish to the phone** (only if configured) — if `<workspace>/publish.env` exists, run `publish.py` after curating so the feed lands on the user's hosted URL.
 
 You never collect, summarize, or paraphrase post content. You only score, drop, and reorder. Every post you keep has its original fields preserved byte-for-byte.
 
@@ -24,6 +25,7 @@ Inside the user's Focus Lab workspace:
 ```
 <workspace>/
   goals.md                     ← the user's content preferences (you read this)
+  publish.env                  ← R2 credentials; presence = publishing is on (optional)
   data/
     YYYY-MM-DD/
       job_HHMMSS/              ← one collection job (this is what you curate)
@@ -35,6 +37,8 @@ Inside the user's Focus Lab workspace:
         posts.filtered.json    ← YOU WRITE THIS
   skills/focus-lab-curator/
     curate.py                  ← the batching harness you run
+    publish.py                 ← uploads a curated job to Cloudflare R2
+    hosted.html                ← the phone viewer publish.py ships to the bucket
     SKILL.md                   ← (you are reading it)
 ```
 
@@ -130,6 +134,7 @@ Start by orienting:
 3. **Pick a job.** Latest under `data/` by default; honor the user's request if they name a specific date / job.
 4. Briefly echo the goals so the user can redirect before you spend tokens scoring.
 5. Run the **Filter flow**.
+6. If `<workspace>/publish.env` exists, run the **Publish flow**. If it doesn't, skip publishing silently — but if the user asks about scrolling on their phone, point them at `install.md` § Publishing.
 
 `curate.py` enforces the same rule: if it sees an untouched template, it exits early with a message telling you to run the Bootstrap flow first. So if the script refuses, run Bootstrap before retrying.
 
@@ -279,6 +284,39 @@ If `goals.md` says nothing about this, use the default.
 
 ---
 
+## Publish flow — when publish.env exists
+
+After the filter finishes (a fresh `posts.filtered.json` exists), publish the job:
+
+```bash
+python3 skills/focus-lab-curator/publish.py
+```
+
+The script uploads the hosted viewer, the curated posts, and the job's media to
+the user's Cloudflare R2 bucket, then prints the public feed URL. Surface its
+stderr progress and include the URL in your final report.
+
+What it does with media (so you can explain it if asked):
+
+- Media is included **in score order** until the daily budget (default 500 MB) is spent.
+- Videos over the per-file cap (default 50 MB) and all YouTube videos become
+  **tap-through link-outs** to the original post instead of uploads.
+- Days older than the retention window (default 14) are pruned from the bucket.
+- Caps are set in `publish.env` (`MAX_VIDEO_MB`, `DAILY_BUDGET_MB`, `RETENTION_DAYS`).
+
+Rules:
+
+- **Run it, don't reimplement it.** Same policy as `curate.py`.
+- **Publish only after a successful filter** — it uploads `posts.filtered.json`, never raw collections.
+- If it fails on missing credentials or a missing `boto3`, relay its error message
+  verbatim — the fix (filling in `publish.env`, `pip install boto3`) belongs to the user.
+- `--dry-run` builds `<workspace>/publish_preview/` without uploading — useful when
+  the user wants to sanity-check before their first real publish.
+- Never print the contents of `publish.env` (it holds the R2 secret key). Refer to
+  keys by name only.
+
+---
+
 ## Output contract (STRICT)
 
 Write **`posts.filtered.json`** at `<workspace>/data/<date>/<job_id>/posts.filtered.json` — the job root, alongside the per-platform folders.
@@ -343,7 +381,11 @@ Print a short summary. Example:
 > Joyful: @cats (81, instagram) — "Cat video — you flagged pets as joy."
 > Sample drop: @outrage_account (5, drain, x) — "Drama/outrage loop, matches your avoid list."
 >
+> Published to your feed: https://pub-xxxxxxxx.r2.dev/index.html (112 media files, 499 MB)
+>
 > Next: open the Focus Lab Feed app's **AI Curation** tab — the curated job will be there.
+
+(Omit the "Published" line when publishing isn't configured.)
 
 Keep it short. The file is the real deliverable.
 
@@ -392,7 +434,7 @@ Fill each section from the user's answers. If a section genuinely has nothing, w
 - Do not drop a post without recording it in `filter_metadata.dropped` — no silent disappearances.
 - Do not add fields beyond `score`, `filter_reason`, `category`.
 - Do not silently normalize fields (don't change `likes: "1k"` back to `1000`, don't coerce types).
-- Do not write any file other than `posts.filtered.json` and (on first bootstrap) `goals.md`.
+- Do not write any file other than `posts.filtered.json` and (on first bootstrap) `goals.md`. (`publish.py` writing to the bucket / `publish_preview/` is fine — that's its job, not yours.)
 - Do not push the user into a "productivity maximization" frame. The joy section is not a consolation prize — it's load-bearing.
 - Do not delete or modify any media files. Curation is read-only against `data/`.
 - Do not group the output by platform. Sort strictly by score so the user gets one mixed feed.
