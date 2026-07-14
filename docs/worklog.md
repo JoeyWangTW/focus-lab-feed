@@ -276,3 +276,24 @@ Verified end-to-end on a real job: workspace at `~/Documents/vibe-scrolling-data
 - Verified the signer byte-for-byte against botocore (dev-only cross-check) across PUT with cache headers, keys with spaces/parens, list queries with continuation tokens.
 - End-to-end test against a fake local S3 server: media HEAD→PUT, posts.json/index.html upload, feed/index.json read-modify-write, retention pruning via LIST+DELETE. All requests signed, exit 0.
 - Removed boto3 from requirements.txt, install.md, SKILL.md; re-synced skill into the live workspace.
+
+## 2026-07-14 - Fix broken collection: media race, hang, YouTube, LinkedIn
+
+Reported: threads/x/instagram got stuck and never finished; youtube/linkedin finished but collected nothing.
+
+Diagnosis (from run logs + live browser probes):
+- Raw API responses WERE being captured for all five platforms, so interception was fine — failures were all downstream.
+- The app runs the five collectors concurrently (`asyncio.create_task`), but `media_downloader` read a module-global run dir set by whichever collector started last → all media written to `linkedin/media/`.
+- The "hang" was the media phase: sequential downloads of ~1GB of video with no timeout (aiohttp's 5-min default per request). Successful runs had been taking 5-11 min each; today's were killed before finishing.
+- YouTube: the account owns two channels, so youtube.com redirects to /account behind a "Select a channel" modal. Captured ytInitialData was the settings page → 0 items parsed, every run.
+- LinkedIn: feed no longer served over Voyager XHR (only notification cards carry activity URNs) and is server-rendered with hashed class names → both API parser and `feed-shared-update-v2` selectors matched nothing.
+
+Fixes:
+- `media_downloader.download_media(posts, output_dir, run_dir=...)` — run_dir passed explicitly; 6-way concurrency, streaming to disk, connect/read/total timeouts, resume of already-downloaded files.
+- `youtube/auth.py` — `_handle_channel_picker()`: select primary channel, tick "don't ask again", re-save storage_state, then verify the home feed loads.
+- `linkedin/interceptor.py` — DOM extractor rewritten against `[data-testid="mainFeed"]` / `[componentkey^="container-update-list"]` / `[componentkey^="feed-commentary"]`; author anchored on the actor avatar; company-name alt variants handled; `blob:` video URLs dropped. Collector now scrapes the DOM on every scroll (list is virtualized).
+- `src/collect.py` — one shared job id per invocation (was minting one per platform); added `--output-dir`.
+
+Verified: full run `2026-07-14/job_093847` → x 56, threads 62, instagram 52, youtube 31 (was 0), linkedin 5 (was 0). Media all in the correct per-platform folders (checked 235 paths, 0 misrouted). Run times 43s-403s (was 5-11 min per platform).
+
+Known limits: LinkedIn posts mostly lack activity URNs → opaque ids and empty `url`; LinkedIn throttles repeated automated loads (feed thinned 5 → 2 posts across back-to-back runs).
