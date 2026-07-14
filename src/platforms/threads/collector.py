@@ -136,7 +136,7 @@ async def run(config: dict) -> dict:
         if posts:
             unique_posts, dupes_removed = deduplicate_within_run(posts)
 
-            downloaded, dl_failed = await download_media(unique_posts, output_dir)
+            downloaded, dl_failed = await download_media(unique_posts, output_dir, run_dir=run_dir)
             if dl_failed > 0:
                 warnings.append(f"{dl_failed} media download(s) failed")
 

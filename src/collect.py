@@ -47,10 +47,23 @@ async def main():
         choices=["x", "threads", "instagram", "youtube", "linkedin"],
         help="Run a specific platform (default: all enabled)",
     )
+    parser.add_argument(
+        "--output-dir", "-o",
+        help="Where collected data lands (default: output_dir from config.json)",
+    )
     args = parser.parse_args()
 
     config = load_config()
+    if args.output_dir:
+        config["output_dir"] = args.output_dir
     platforms_config = config.get("platforms", {})
+
+    # Every platform in one invocation belongs to the same job, the way the
+    # desktop app groups them. Without this each collector minted its own
+    # job_HHMMSS and a single run scattered across several job folders.
+    from src.storage import create_job_id
+    config["_job_id"] = create_job_id()
+    print(f"[collect] Job {config['_job_id']} → {config['output_dir']}")
 
     if args.platform:
         # Run single platform

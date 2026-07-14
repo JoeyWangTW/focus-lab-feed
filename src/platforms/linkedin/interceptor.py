@@ -20,31 +20,140 @@ from src.models import Post
 ACTIVITY_RE = re.compile(r"urn:li:activity:(\d+)")
 
 
-# Fallback DOM walker — only used if the Voyager API parser yields nothing.
+# DOM walker.
+#
+# As of 2026-07 LinkedIn server-renders the feed with hashed, per-build class
+# names (`div._1264a1eb`) and no longer ships feed updates over Voyager XHR, so
+# both the old `div.feed-shared-update-v2` selectors and the API parser below
+# come up empty. The only durable hooks left in the new markup are:
+#
+#   [data-testid="mainFeed"]                     the feed column
+#   [componentkey^="container-update-list"]      the list whose children are posts
+#   [componentkey^="feed-commentary"]            a post's body text
+#   componentkey="expanded<KEY>FeedType_..."     a per-post opaque key
+#
+# Most cards no longer carry a `urn:li:activity` anywhere in their markup, so
+# we fall back to the opaque key for the post id and leave `url` empty rather
+# than fabricate a link. Everything else (author, media, counts) comes from
+# structure and aria-labels, not classes.
 EXTRACT_JS = r"""
 () => {
+  // The update list is NOT nested inside [data-testid="mainFeed"] — look both
+  // up from the document, not from the feed column.
+  const feed = document.querySelector('[data-testid="mainFeed"]') || document.body;
+  const list = document.querySelector('[componentkey^="container-update-list"]');
+
+  // Card roots: children of the update list. If the list isn't there (LinkedIn
+  // renders it lazily), walk up from each commentary block instead.
+  let cards = [];
+  if (list) {
+    cards = [...list.children];
+  } else {
+    const seen = new Set();
+    for (const com of document.querySelectorAll('[componentkey^="feed-commentary"]')) {
+      let el = com;
+      for (let i = 0; i < 12 && el.parentElement; i++) {
+        el = el.parentElement;
+        if (el.querySelector('a[href*="/in/"], a[href*="/company/"]')) break;
+      }
+      if (el && !seen.has(el)) { seen.add(el); cards.push(el); }
+    }
+  }
+
+  const num = (s) => parseInt(String(s).replace(/[,.\s]/g, ''), 10) || 0;
   const out = [];
-  const cards = document.querySelectorAll(
-    'div.feed-shared-update-v2[data-urn], div[data-id^="urn:li:activity:"]'
-  );
+
   for (const card of cards) {
-    const urn = card.getAttribute('data-urn') || card.getAttribute('data-id') || '';
-    if (!urn) continue;
-    const text = (
-      card.querySelector('.update-components-text') ||
-      card.querySelector('.feed-shared-inline-show-more-text')
-    )?.innerText?.trim() || '';
-    const actor = card.querySelector('.update-components-actor');
-    const authorName =
-      actor?.querySelector('.update-components-actor__title span[aria-hidden="true"]')?.innerText?.trim() ||
-      actor?.querySelector('.update-components-actor__title')?.innerText?.trim() || '';
-    const m = urn.match(/urn:li:activity:(\d+)/);
+    const html = card.outerHTML || '';
+    const commentary = card.querySelector('[componentkey^="feed-commentary"]');
+    const text = (commentary?.innerText || '').trim();
+
+    // --- id: activity urn if LinkedIn still ships one, else the opaque key
+    let id = '', activityId = '';
+    const m = html.match(/urn:li:activity:(\d+)/);
+    if (m) { activityId = m[1]; id = 'urn:li:activity:' + m[1]; }
+    if (!id) {
+      const keys = [...card.querySelectorAll('[componentkey]')].map(e => e.getAttribute('componentkey') || '');
+      const k = keys.find(k => /^expanded(.+?)FeedType/.test(k));
+      const km = k && k.match(/^expanded(.+?)FeedType/);
+      if (km) id = 'linkedin:' + km[1];
+    }
+
+    // --- author. Anchor on the actor's avatar: the first /in/ link in a card
+    // is often the social-context header ("Jane commented on this"), which
+    // belongs to someone other than the poster.
+    const avatar = card.querySelector('img[alt^="View"]');
+    const profLink = avatar?.closest('a[href*="/in/"], a[href*="/company/"]')
+      || card.querySelector('a[href*="/in/"], a[href*="/company/"]');
+    const href = profLink?.getAttribute('href') || '';
+    const hm = href.match(/\/(?:in|company)\/([^/?#]+)/);
+    const handle = hm ? hm[1] : '';
+    let name = '';
+    const alt = avatar?.alt || '';
+    // People: "View Jane Doe’s profile". Companies: "View organization page for Acme".
+    const am = alt.match(/^View (.+?)[’']s (?:profile|page|photo)/)
+      || alt.match(/^View organization page for (.+?)$/i);
+    if (am) name = am[1].trim();
+    if (!name && alt) {
+      // Unknown alt wording — strip the "View …" chrome and take what's left.
+      // Seen in the wild: "View company: Y Combinator", "View organization
+      // page for Acme", "View Jane’s profile".
+      name = alt.replace(/^View\s+(organization page for\s+)?/i, '')
+                .replace(/^(company|organization|page)\s*:\s*/i, '')
+                .replace(/[’']s\s+(profile|page|photo).*$/i, '')
+                .replace(/\s+(profile|page|photo)$/i, '').trim();
+    }
+    if (!name && profLink) name = (profLink.innerText || '').split('\n')[0].trim();
+    if (!name && handle) {
+      // Company pages sometimes render no usable label — the slug is the only
+      // name we have. "y-combinator" → "Y Combinator".
+      name = handle.replace(/-\d+$/, '').split('-')
+        .map(w => w ? w[0].toUpperCase() + w.slice(1) : w).join(' ');
+    }
+
+    // --- media: licdn assets that aren't avatars/logos
+    const imgs = [...card.querySelectorAll('img')]
+      .map(i => i.currentSrc || i.src || '')
+      .filter(s => s.includes('licdn.com') &&
+                   !/profile-displayphoto|company-logo|profile-framedphoto|ghost|static\.licdn/.test(s));
+    // LinkedIn plays feed video from MediaSource `blob:` URLs, which only
+    // resolve inside that page session — they 404 for the downloader. Keep the
+    // poster image (already in `imgs`) and drop the unusable blob.
+    const vids = [...card.querySelectorAll('video')]
+      .map(v => v.currentSrc || v.src || '')
+      .filter(s => s && !s.startsWith('blob:'));
+
+    // --- engagement: aria-labels first ("3 reactions"), then visible text
+    let likes = 0, comments = 0;
+    for (const e of card.querySelectorAll('[aria-label]')) {
+      const a = e.getAttribute('aria-label') || '';
+      const r = a.match(/([\d,.]+)\s+reaction/i);
+      const c = a.match(/([\d,.]+)\s+comment/i);
+      if (r) likes = Math.max(likes, num(r[1]));
+      if (c) comments = Math.max(comments, num(c[1]));
+    }
+    const body = card.innerText || '';
+    if (!likes) { const r = body.match(/([\d,]+)\s+reactions?/i); if (r) likes = num(r[1]); }
+    if (!comments) { const c = body.match(/([\d,]+)\s+comments?/i); if (c) comments = num(c[1]); }
+
+    // Skip chrome (sharebox, ads carousel, "suggested" modules) — a real post
+    // has an author and either text or media.
+    if (!id) continue;
+    if (!handle && !name) continue;
+    if (!text && imgs.length === 0 && vids.length === 0) continue;
+
     out.push({
-      id: urn,
-      activity_id: m ? m[1] : '',
+      id,
+      activity_id: activityId,
       text,
-      author_name: authorName,
-      url: m ? `https://www.linkedin.com/feed/update/urn:li:activity:${m[1]}/` : '',
+      author_name: name,
+      author_handle: handle,
+      url: activityId ? `https://www.linkedin.com/feed/update/urn:li:activity:${activityId}/` : '',
+      media_urls: imgs,
+      video_urls: vids,
+      likes,
+      replies: comments,
+      is_ad: /\bPromoted\b/i.test(body),
     });
   }
   return out;
@@ -383,9 +492,14 @@ class ResponseInterceptor:
             thumb = self._image_url_from_attribute(thumb_obj) or thumb_obj.get("url", "")
         return best_url, thumb
 
-    # ----------------------------------------------------------- DOM fallback
+    # ----------------------------------------------------------- DOM extraction
     async def extract_from_page(self, page):
-        """Fallback DOM walker. Only adds posts the API hasn't already given us."""
+        """DOM walker. Only adds posts the API hasn't already given us.
+
+        Since LinkedIn stopped serving the feed over Voyager XHR this is the
+        path that actually produces posts; the API parser above still runs
+        first in case they bring it back.
+        """
         try:
             items = await page.evaluate(EXTRACT_JS)
         except Exception as e:
@@ -394,22 +508,27 @@ class ResponseInterceptor:
 
         added = 0
         for item in items or []:
-            urn = item.get("id") or ""
-            if not urn or urn in self.posts_by_id:
+            post_id = item.get("id") or ""
+            if not post_id or post_id in self.posts_by_id:
                 continue
-            self.posts_by_id[urn] = Post(
-                id=urn,
+            self.posts_by_id[post_id] = Post(
+                id=post_id,
                 platform="linkedin",
                 text=item.get("text", ""),
-                author_handle=item.get("author_name", ""),
+                author_handle=item.get("author_handle", ""),
                 author_name=item.get("author_name", ""),
                 created_at="",
                 url=item.get("url", ""),
-                platform_data={"activity_id": item.get("activity_id", ""), "source": "dom_fallback"},
+                likes=item.get("likes", 0) or 0,
+                replies=item.get("replies", 0) or 0,
+                media_urls=list(item.get("media_urls") or []),
+                video_urls=list(item.get("video_urls") or []),
+                is_ad=bool(item.get("is_ad")),
+                platform_data={"activity_id": item.get("activity_id", ""), "source": "dom"},
             )
             added += 1
         if added:
-            print(f"[interceptor:linkedin] DOM fallback: +{added} posts")
+            print(f"[interceptor:linkedin] DOM: +{added} posts")
         return added
 
     def parse_all_posts(self, skip_ads: bool = True) -> list[Post]:

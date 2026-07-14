@@ -32,6 +32,64 @@ async def login_and_save_session():
         print("[auth:youtube] Browser closed. You can now run the collector.")
 
 
+CHANNEL_ITEM = "ytd-account-item-renderer"
+
+
+async def _handle_channel_picker(page, context, session_path: Path) -> bool:
+    """Get past YouTube's "Select a channel" interstitial.
+
+    Accounts that own more than one channel get bounced from the home feed to
+    /account with a channel picker. Until a channel is chosen there is no feed
+    to scroll — ytInitialData is the settings page, so the collector sees zero
+    items. Pick the first channel (the account's primary), tick "don't ask
+    again" so future runs skip the interstitial, and persist the session.
+
+    Returns True if the picker was present and handled.
+    """
+    items = page.locator(CHANNEL_ITEM)
+    try:
+        count = await items.count()
+    except Exception:
+        return False
+    if count == 0:
+        return False
+
+    try:
+        name = (await items.first.inner_text()).split("\n")[0].strip()
+    except Exception:
+        name = "(first channel)"
+    print(f"[auth:youtube] Channel picker blocking the feed — selecting {name!r} of {count}.")
+
+    # Tick "Don't ask again" first, if it's there: clicking the channel closes
+    # the dialog, so the checkbox has to go first to be remembered.
+    checkbox = page.locator("tp-yt-paper-checkbox, ytd-checkbox-renderer").first
+    try:
+        if await checkbox.count() > 0:
+            await checkbox.click(timeout=3000)
+    except Exception:
+        pass  # cosmetic — we still select a channel below
+
+    try:
+        await items.first.click(timeout=5000)
+    except Exception as e:
+        print(f"[auth:youtube] Could not click the channel item: {e}")
+        return False
+
+    await page.wait_for_timeout(3000)
+
+    # The picker sends us wherever it likes; go get the actual feed.
+    await page.goto("https://www.youtube.com/", wait_until="domcontentloaded")
+    await page.wait_for_timeout(4000)
+
+    try:
+        await context.storage_state(path=str(session_path))
+        print("[auth:youtube] Channel selected; session re-saved.")
+    except Exception as e:
+        print(f"[auth:youtube] Warning: couldn't re-save session: {e}")
+
+    return True
+
+
 async def load_session(playwright, session_file: str | None = None):
     """Launch browser with saved session state. Returns (browser, context, page)."""
     session_path = Path(session_file) if session_file else SESSION_FILE
@@ -63,6 +121,13 @@ async def load_session(playwright, session_file: str | None = None):
             "Session expired or invalid. "
             "Run 'python3 -m src.platforms.youtube.auth' to re-authenticate."
         )
+
+    await _handle_channel_picker(page, context, session_path)
+
+    # Whatever happened above, the collector needs to start on the home feed.
+    if "/account" in page.url or not page.url.rstrip("/").endswith("youtube.com"):
+        await page.goto("https://www.youtube.com/", wait_until="domcontentloaded")
+        await page.wait_for_timeout(3000)
 
     print(f"[auth:youtube] Session loaded successfully. Current URL: {page.url}")
     return browser, context, page

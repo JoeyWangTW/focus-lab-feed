@@ -77,12 +77,14 @@ async def run(config: dict) -> dict:
         if initial_count == 0:
             await page.wait_for_timeout(5000)
             initial_count = len(interceptor.parse_all_posts())
-            if initial_count == 0:
-                print("[linkedin] No API posts captured — falling back to DOM extraction.")
-                await interceptor.extract_from_page(page)
-                initial_count = len(interceptor.parse_all_posts())
-                if initial_count == 0:
-                    warnings.append("No posts found in feed after extended wait")
+
+        # DOM extraction always runs: LinkedIn no longer ships feed updates over
+        # Voyager, so this is the path that actually finds posts. It only adds
+        # ids the API parser didn't already produce.
+        await interceptor.extract_from_page(page)
+        initial_count = len(interceptor.parse_all_posts())
+        if initial_count == 0:
+            warnings.append("No posts found in feed after extended wait")
 
         max_posts = platform_config.get("max_posts", 50)
         max_minutes = platform_config.get("max_minutes", 5)
@@ -110,6 +112,11 @@ async def run(config: dict) -> dict:
             scroll_count += 1
             await page.wait_for_timeout(3000)
 
+            # LinkedIn serves the feed as server-rendered HTML, not Voyager XHR,
+            # and virtualizes the list — so scrape each scroll or the cards that
+            # scrolled past are gone for good.
+            await interceptor.extract_from_page(page)
+
             current_count = len(interceptor.parse_all_posts())
             new_posts = current_count - prev_count
 
@@ -132,7 +139,7 @@ async def run(config: dict) -> dict:
 
         if posts:
             unique_posts, _ = deduplicate_within_run(posts)
-            downloaded, dl_failed = await download_media(unique_posts, output_dir)
+            downloaded, dl_failed = await download_media(unique_posts, output_dir, run_dir=run_dir)
             if dl_failed > 0:
                 warnings.append(f"{dl_failed} media download(s) failed")
             save_posts(unique_posts, run_dir, platform="linkedin", duration_seconds=duration)
