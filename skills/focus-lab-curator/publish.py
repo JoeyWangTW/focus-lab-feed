@@ -522,7 +522,9 @@ def main() -> int:
         print(
             f"Preview built at {preview}\n"
             f"Test it:  python3 -m http.server 8899 -d '{preview}'\n"
-            f"then open http://localhost:8899/index.html"
+            f"then open http://localhost:8899/index.html\n"
+            f"(Note: video scrubbing needs HTTP Range support, which the simple\n"
+            f" server above lacks but R2 provides — scrubbing works once published.)"
         )
         return 0
 
