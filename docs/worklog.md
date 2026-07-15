@@ -304,3 +304,15 @@ Known limits: LinkedIn posts mostly lack activity URNs → opaque ids and empty 
 - Fixed the video player: removed native `controls` (they fought our JS), added explicit custom controls — muted autoplay in focus via IntersectionObserver, a pause button (sets dataset.userPaused so the observer won't restart it), an unmute button. Verified with Playwright: 0 native controls, unmute + pause work, autoplay-on-focus works, no JS errors.
 - publish.py: added bucket-size backstop. Each publish measures the whole bucket; if within 5% of BUCKET_LIMIT_GB (default 10 = R2 free tier) it deletes oldest days (never today's) down to 80%. R2 client gained list_objects() for per-object Size. Verified against a fake S3 (12GB → oldest pruned, today kept).
 - Synced skill files into the live workspace; committed + pushed to feature/publish-feed.
+
+## 2026-07-15 - Collection resilience: never lose a scrape to a hung phase
+
+Reported: Instagram/X/Threads "failed again" during collection. Root cause was NOT scraping — a live job was found hung 8+ min on `[replies:instagram] Batch 4: opening 1 tabs...`. The collectors saved posts.json only AFTER fetch_replies, and fetch_replies used an unbounded asyncio.gather, so one wedged detail tab froze the batch and the run hung forever with nothing written → looked like a failure. (4K Twitter videos also hit the 180s per-file download timeout, making x crawl.)
+
+Fixes:
+- src/platforms/reply_utils.py (new): bounded_tab() wraps each reply tab in a 35s timeout returning [] on timeout/error; safe_close() bounds page.close() at 5s. One stuck tab is abandoned, never fatal to the gather batch. Wired into x/threads/instagram replies.py.
+- Collectors (x/threads/instagram) restructured: save posts.json immediately after dedup; media + replies are best-effort, each wrapped in asyncio.wait_for phase caps (media 420s, replies 180s) with try/except; final re-save attaches media paths + replies. A hang/crash now costs only enrichment, not the posts. save_run_summary always reached.
+- media_downloader assembles local_media_paths in a finally, so a cancelled media phase still links downloaded files.
+- app/api/collection.py: whole-run watchdog via asyncio.wait_for (scroll+media+replies+margin) so the task always completes and never hangs the UI.
+
+Validated: full CLI run (job_104734) — all 5 platforms wrote posts.json + run_log; posts.json written twice per platform (early + enriched); replies fetched (x 95, threads 50, ig 50). Unit test: a hung tab in a gather batch now completes in ~1s → []; safe_close bounds a wedged close; healthy tabs still return data.
