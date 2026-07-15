@@ -86,6 +86,7 @@ PUBLIC_BASE_URL=https://pub-xxxxxxxx.r2.dev
 # MAX_VIDEO_MB=50
 # DAILY_BUDGET_MB=500
 # RETENTION_DAYS=14
+# BUCKET_LIMIT_GB=10
 ```
 
 That's all — the uploader talks to R2's S3 API with Python's standard library,
@@ -98,7 +99,11 @@ screen.
 How it stays inside the free tier: media uploads in score order until
 `DAILY_BUDGET_MB` is spent; videos over `MAX_VIDEO_MB` (and all YouTube videos)
 become tap-through links to the original post; days older than `RETENTION_DAYS`
-are pruned. Worst case ≈ 500 MB × 14 days = 7 GB.
+are pruned. Worst case ≈ 500 MB × 14 days = 7 GB. As a hard backstop, each
+publish also measures the whole bucket and — if it's within 5% of
+`BUCKET_LIMIT_GB` (default 10, the free-tier ceiling) — deletes the oldest days
+(never today's) until it's back under 80%. So the feed can never fail a publish
+or spill into paid storage, even if a day runs unusually heavy.
 
 **Privacy note:** an `r2.dev` public bucket is reachable by anyone who has the
 URL (it's unguessable, but it is public). For real access control, put the

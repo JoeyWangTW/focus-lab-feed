@@ -15,11 +15,13 @@ Bucket layout:
     feed/<YYYY-MM-DD>/media/<file>  ← images and small videos
 
 Large videos are NOT uploaded (podcasts/interviews would blow through R2's
-free tier). Three guards keep the bucket small:
+free tier). Four guards keep the bucket small:
 
     MAX_VIDEO_MB    (default 50)  — bigger videos become tap-through links
     DAILY_BUDGET_MB (default 500) — media included in score order until spent
     RETENTION_DAYS  (default 14)  — older days deleted from the bucket
+    BUCKET_LIMIT_GB (default 10)  — when the bucket nears this, drop the oldest
+                                    days (never today's) until back under 80%
 
 YouTube videos are never uploaded regardless of size — the right UX for
 long-form video is tapping through to YouTube anyway.
@@ -35,6 +37,7 @@ Credentials + config live in `<workspace>/publish.env` (KEY=VALUE lines):
     # MAX_VIDEO_MB=50
     # DAILY_BUDGET_MB=500
     # RETENTION_DAYS=14
+    # BUCKET_LIMIT_GB=10
 
 Typical use, from the workspace root:
 
@@ -66,10 +69,17 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 MB = 1024 * 1024
+GB = 1024 * MB
 
 DEFAULT_MAX_VIDEO_MB = 50
 DEFAULT_DAILY_BUDGET_MB = 500
 DEFAULT_RETENTION_DAYS = 14
+# R2's free tier is 10 GB. When the bucket gets close to this, drop the oldest
+# days (beyond the date-based retention) so a publish never fails or spills into
+# paid storage. Trigger at 95% full, prune back down to 80%.
+DEFAULT_BUCKET_LIMIT_GB = 10
+BUCKET_HIGH_WATER = 0.95
+BUCKET_LOW_WATER = 0.80
 
 JOB_DIR_RE = re.compile(r"^job_\d{6}$")
 DATE_DIR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -381,8 +391,9 @@ class R2Client:
     def delete(self, key: str) -> None:
         self._request("DELETE", key)  # 204 on success, 404 is fine too
 
-    def list_keys(self, prefix: str) -> list[str]:
-        keys: list[str] = []
+    def list_objects(self, prefix: str) -> list[tuple[str, int]]:
+        """List (key, size_bytes) under a prefix, following pagination."""
+        objs: list[tuple[str, int]] = []
         token: str | None = None
         while True:
             query = {"list-type": "2", "prefix": prefix}
@@ -393,13 +404,21 @@ class R2Client:
                 raise RuntimeError(f"LIST {prefix} → HTTP {status}: {out[:300]!r}")
             root = ET.fromstring(out)
             ns = root.tag.split("}")[0] + "}" if root.tag.startswith("{") else ""
-            for el in root.findall(f"{ns}Contents/{ns}Key"):
-                keys.append(el.text or "")
+            for el in root.findall(f"{ns}Contents"):
+                key = el.findtext(f"{ns}Key") or ""
+                try:
+                    size = int(el.findtext(f"{ns}Size") or 0)
+                except ValueError:
+                    size = 0
+                objs.append((key, size))
             if (root.findtext(f"{ns}IsTruncated") or "").lower() != "true":
-                return keys
+                return objs
             token = root.findtext(f"{ns}NextContinuationToken")
             if not token:
-                return keys
+                return objs
+
+    def list_keys(self, prefix: str) -> list[str]:
+        return [k for k, _ in self.list_objects(prefix)]
 
 
 # ----- Main ----------------------------------------------------------------------
@@ -417,6 +436,8 @@ def main() -> int:
     p.add_argument("--max-video-mb", type=int, default=None)
     p.add_argument("--budget-mb", type=int, default=None)
     p.add_argument("--retention-days", type=int, default=None)
+    p.add_argument("--bucket-limit-gb", type=int, default=None,
+                   help="drop oldest days when the bucket nears this size (default 10 = R2 free tier)")
     args = p.parse_args()
 
     workspace = resolve_workspace(args.workspace)
@@ -439,6 +460,7 @@ def main() -> int:
     max_video_mb = args.max_video_mb or env_int(cfg, "MAX_VIDEO_MB", DEFAULT_MAX_VIDEO_MB)
     budget_mb = args.budget_mb or env_int(cfg, "DAILY_BUDGET_MB", DEFAULT_DAILY_BUDGET_MB)
     retention_days = args.retention_days or env_int(cfg, "RETENTION_DAYS", DEFAULT_RETENTION_DAYS)
+    bucket_limit_gb = args.bucket_limit_gb or env_int(cfg, "BUCKET_LIMIT_GB", DEFAULT_BUCKET_LIMIT_GB)
 
     if not VIEWER_TEMPLATE.is_file():
         sys.exit(f"error: viewer template missing at {VIEWER_TEMPLATE}")
@@ -531,23 +553,59 @@ def main() -> int:
     index = json.loads(raw_index) if raw_index else {"days": []}
     upsert_day(index, day_entry)
 
-    # Retention: drop days older than the cutoff from bucket + index.
+    def drop_day(dday: str) -> int:
+        n = 0
+        for k in client.list_keys(f"feed/{dday}/"):
+            client.delete(k)
+            n += 1
+        return n
+
+    # Retention 1 — age: drop days older than the cutoff.
     cutoff = (datetime.now(timezone.utc) - timedelta(days=retention_days)).strftime("%Y-%m-%d")
     stale = [d for d in index["days"] if d["day"] < cutoff]
     for entry in stale:
-        n = 0
-        for k in client.list_keys(f"feed/{entry['day']}/"):
-            client.delete(k)
-            n += 1
-        log(f"  pruned {entry['day']} ({n} objects)")
+        n = drop_day(entry["day"])
+        log(f"  pruned {entry['day']} — age ({n} objects)")
     index["days"] = [d for d in index["days"] if d["day"] >= cutoff]
+
+    # Retention 2 — size: if the bucket is near the limit, drop oldest days
+    # (never today's) until we're back under the low-water mark. This is the
+    # backstop that keeps us inside R2's free tier no matter how heavy a day is.
+    limit = bucket_limit_gb * GB
+    total = 0
+    per_day: dict[str, int] = {}
+    for key, size in client.list_objects("feed/"):
+        total += size
+        m = re.match(r"feed/(\d{4}-\d{2}-\d{2})/", key)
+        if m:
+            per_day[m.group(1)] = per_day.get(m.group(1), 0) + size
+    log(f"bucket usage: {total / GB:.2f} / {bucket_limit_gb} GB")
+
+    space_pruned: list[str] = []
+    if total > limit * BUCKET_HIGH_WATER:
+        # Oldest first, but never delete the day we just published.
+        candidates = sorted(d["day"] for d in index["days"] if d["day"] != day)
+        for dday in candidates:
+            if total <= limit * BUCKET_LOW_WATER:
+                break
+            freed = per_day.get(dday, 0)
+            n = drop_day(dday)
+            total -= freed
+            space_pruned.append(dday)
+            log(f"  pruned {dday} — space ({n} objects, ~{freed // MB} MB freed)")
+        index["days"] = [d for d in index["days"] if d["day"] not in space_pruned]
+        if total > limit * BUCKET_LOW_WATER:
+            log(f"warning: bucket still {total / GB:.2f} GB after pruning — "
+                "only today's feed remains; consider a smaller DAILY_BUDGET_MB.")
+
     index["updated_at"] = payload["publish_metadata"]["published_at"]
     client.put("feed/index.json",
                json.dumps(index, ensure_ascii=False).encode("utf-8"),
                "application/json", "no-cache")
 
+    pruned_total = len(stale) + len(space_pruned)
     url = cfg["PUBLIC_BASE_URL"].rstrip("/") + "/index.html"
-    log(f"done — {uploaded} media uploaded, {skipped} already present, {len(stale)} days pruned")
+    log(f"done — {uploaded} media uploaded, {skipped} already present, {pruned_total} days pruned")
     print(
         f"Published {job_label} — {len(posts)} posts, "
         f"{len(uploads)} media files ({payload['publish_metadata']['media_mb']} MB)\n"

@@ -302,7 +302,11 @@ What it does with media (so you can explain it if asked):
 - Videos over the per-file cap (default 50 MB) and all YouTube videos become
   **tap-through link-outs** to the original post instead of uploads.
 - Days older than the retention window (default 14) are pruned from the bucket.
-- Caps are set in `publish.env` (`MAX_VIDEO_MB`, `DAILY_BUDGET_MB`, `RETENTION_DAYS`).
+- **Bucket-limit backstop:** each publish measures total bucket size; if it's
+  within 5% of `BUCKET_LIMIT_GB` (default 10 = R2 free tier), the oldest days
+  (never today's) are deleted until back under 80%. Keeps publishing from ever
+  failing or spilling into paid storage.
+- Caps are set in `publish.env` (`MAX_VIDEO_MB`, `DAILY_BUDGET_MB`, `RETENTION_DAYS`, `BUCKET_LIMIT_GB`).
 
 Rules:
 
