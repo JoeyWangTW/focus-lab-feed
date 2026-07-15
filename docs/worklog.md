@@ -297,3 +297,10 @@ Fixes:
 Verified: full run `2026-07-14/job_093847` → x 56, threads 62, instagram 52, youtube 31 (was 0), linkedin 5 (was 0). Media all in the correct per-platform folders (checked 235 paths, 0 misrouted). Run times 43s-403s (was 5-11 min per platform).
 
 Known limits: LinkedIn posts mostly lack activity URNs → opaque ids and empty `url`; LinkedIn throttles repeated automated loads (feed thinned 5 → 2 posts across back-to-back runs).
+
+## 2026-07-15 - Hosted viewer redesign, video controls, bucket-limit pruning
+
+- Imported the claude.ai "Feed Viewer.dc.html" design into skills/focus-lab-curator/hosted.html: comfortable spacing tokens (--pad 18 / --gap 12 / --radius 20), Space Grotesk brand type, spiral logo, avatar initials, ★ score chips, reason chips, per-platform badge colors, Lucide SVG engagement icons, carousel counter. Kept the R2 fetch/day-picker/link-out data layer.
+- Fixed the video player: removed native `controls` (they fought our JS), added explicit custom controls — muted autoplay in focus via IntersectionObserver, a pause button (sets dataset.userPaused so the observer won't restart it), an unmute button. Verified with Playwright: 0 native controls, unmute + pause work, autoplay-on-focus works, no JS errors.
+- publish.py: added bucket-size backstop. Each publish measures the whole bucket; if within 5% of BUCKET_LIMIT_GB (default 10 = R2 free tier) it deletes oldest days (never today's) down to 80%. R2 client gained list_objects() for per-object Size. Verified against a fake S3 (12GB → oldest pruned, today kept).
+- Synced skill files into the live workspace; committed + pushed to feature/publish-feed.
