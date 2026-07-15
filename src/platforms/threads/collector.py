@@ -17,6 +17,7 @@ from src.media_downloader import download_media
 from src.platforms.threads.auth import load_session
 from src.platforms.threads.interceptor import ResponseInterceptor
 from src.platforms.threads.replies import fetch_replies
+from src.platforms.reply_utils import MEDIA_PHASE_TIMEOUT, REPLY_PHASE_TIMEOUT
 from src.storage import deduplicate_within_run, get_run_dir, save_posts, save_run_summary, set_run_dir
 
 
@@ -135,33 +136,51 @@ async def run(config: dict) -> dict:
 
         if posts:
             unique_posts, dupes_removed = deduplicate_within_run(posts)
+            downloaded = dl_failed = replies_fetched = 0
 
-            downloaded, dl_failed = await download_media(unique_posts, output_dir, run_dir=run_dir)
+            # Save the scrape immediately — media + replies are best-effort
+            # enrichment below and must never be able to lose captured posts.
+            save_posts(unique_posts, run_dir, platform="threads", duration_seconds=duration)
+
+            # Media — bounded whole-phase cap on top of per-file timeouts.
+            try:
+                downloaded, dl_failed = await asyncio.wait_for(
+                    download_media(unique_posts, output_dir, run_dir=run_dir),
+                    timeout=MEDIA_PHASE_TIMEOUT,
+                )
+            except asyncio.TimeoutError:
+                warnings.append(f"media phase exceeded {MEDIA_PHASE_TIMEOUT}s; saved with partial media")
+            except Exception as e:
+                warnings.append(f"media phase error: {e}")
             if dl_failed > 0:
                 warnings.append(f"{dl_failed} media download(s) failed")
 
-            # Fetch replies for top posts by reply count
+            # Replies — bounded; a wedged detail tab can't stall the run.
             reply_posts = [p for p in unique_posts if p.replies > 0 and p.url]
             reply_posts.sort(key=lambda p: p.replies, reverse=True)
-            max_reply_posts = platform_config.get("max_reply_posts", 10)
-            reply_posts = reply_posts[:max_reply_posts]
-
+            reply_posts = reply_posts[:platform_config.get("max_reply_posts", 10)]
             if reply_posts:
                 post_dicts = [{"id": p.id, "url": p.url, "author_handle": p.author_handle} for p in reply_posts]
-                replies_map = await fetch_replies(
-                    context,
-                    post_dicts,
-                    max_replies_per_post=platform_config.get("max_replies_per_post", 5),
-                    batch_size=platform_config.get("reply_batch_size", 3),
-                )
-                post_by_id = {p.id: p for p in unique_posts}
-                for pid, reply_list in replies_map.items():
-                    if pid in post_by_id and reply_list:
-                        post_by_id[pid].top_replies = [asdict(r) for r in reply_list]
-                replies_fetched = sum(len(r) for r in replies_map.values())
-            else:
-                replies_fetched = 0
+                try:
+                    replies_map = await asyncio.wait_for(
+                        fetch_replies(
+                            context, post_dicts,
+                            max_replies_per_post=platform_config.get("max_replies_per_post", 5),
+                            batch_size=platform_config.get("reply_batch_size", 3),
+                        ),
+                        timeout=REPLY_PHASE_TIMEOUT,
+                    )
+                    post_by_id = {p.id: p for p in unique_posts}
+                    for pid, reply_list in replies_map.items():
+                        if pid in post_by_id and reply_list:
+                            post_by_id[pid].top_replies = [asdict(r) for r in reply_list]
+                    replies_fetched = sum(len(r) for r in replies_map.values())
+                except asyncio.TimeoutError:
+                    warnings.append(f"reply phase exceeded {REPLY_PHASE_TIMEOUT}s; saved without replies")
+                except Exception as e:
+                    warnings.append(f"reply phase error: {e}")
 
+            # Re-save with media paths + replies attached.
             save_posts(unique_posts, run_dir, platform="threads", duration_seconds=duration)
         else:
             unique_posts = []

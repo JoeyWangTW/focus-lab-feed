@@ -63,7 +63,21 @@ async def _run_collection(task, platform: str, config: dict):
             task.error = f"Unknown platform: {platform}"
             return
 
-        summary = await run(config)
+        # Whole-run watchdog. The collectors bound their own scroll/media/reply
+        # phases and save progressively, so run() should finish well under this.
+        # It's a last-resort backstop: if something unforeseen wedges (an
+        # unresponsive browser, a stuck close), the task still completes instead
+        # of hanging the UI forever. Scale it off the platform's own limits.
+        pconf = config.get("platforms", {}).get(platform, {})
+        hard_cap = (pconf.get("max_minutes", 5) * 60) + 420 + 180 + 180  # scroll + media + replies + margin
+
+        try:
+            summary = await asyncio.wait_for(run(config), timeout=hard_cap)
+        except asyncio.TimeoutError:
+            task.status = "failed"
+            task.error = f"collection exceeded {hard_cap}s watchdog; any posts scraped were saved"
+            print(f"[collection:{platform}] Watchdog fired at {hard_cap}s")
+            return
 
         if summary.get("error"):
             task.status = "failed"

@@ -3,6 +3,8 @@
 import asyncio
 from dataclasses import dataclass
 
+from src.platforms.reply_utils import bounded_tab, safe_close
+
 
 @dataclass
 class Reply:
@@ -92,7 +94,7 @@ async def _fetch_replies_for_post(
         print(f"[replies:threads] Error fetching {post_url}: {e}")
         return []
     finally:
-        await page.close()
+        await safe_close(page)
 
 
 async def fetch_replies(
@@ -121,7 +123,7 @@ async def fetch_replies(
         print(f"[replies:threads] Batch {batch_num}: opening {len(batch)} tabs...")
 
         tasks = [
-            _fetch_replies_for_post(context, pid, url, author, max_replies_per_post)
+            bounded_tab(_fetch_replies_for_post(context, pid, url, author, max_replies_per_post), url)
             for pid, url, author in batch
         ]
         results = await asyncio.gather(*tasks)

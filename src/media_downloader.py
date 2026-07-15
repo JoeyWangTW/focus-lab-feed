@@ -128,16 +128,20 @@ async def download_media(
             if done % 10 == 0 or done == total:
                 print(f"[download] Progress: {done}/{total} ({downloaded} ok, {failed} failed)")
 
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        await asyncio.gather(*[
-            fetch_one(i, post, url, dest, is_video, platform, session)
-            for i, (post, url, dest, is_video, platform) in enumerate(tasks)
-        ])
-
-    for post in posts:
-        paths = results.get(id(post))
-        if paths:
-            post.local_media_paths.extend(p for _, p in sorted(paths))
+    # Assemble in a finally so that even if this phase is cancelled (e.g. a
+    # collector's media-phase timeout fires), every file that DID download is
+    # still linked onto its post — in URL order — rather than orphaned on disk.
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            await asyncio.gather(*[
+                fetch_one(i, post, url, dest, is_video, platform, session)
+                for i, (post, url, dest, is_video, platform) in enumerate(tasks)
+            ])
+    finally:
+        for post in posts:
+            paths = results.get(id(post))
+            if paths:
+                post.local_media_paths.extend(p for _, p in sorted(paths))
 
     print(f"[download] Complete: {downloaded} downloaded, {failed} failed out of {total}")
     return downloaded, failed

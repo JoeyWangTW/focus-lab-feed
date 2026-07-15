@@ -17,6 +17,7 @@ from src.platforms.x.auth import load_session
 from src.platforms.x.interceptor import ResponseInterceptor
 from src.platforms.x.replies import fetch_replies
 from src.platforms.x.scroller import scroll_loop
+from src.platforms.reply_utils import MEDIA_PHASE_TIMEOUT, REPLY_PHASE_TIMEOUT
 from src.storage import deduplicate_within_run, get_run_dir, save_posts, save_run_summary, set_run_dir
 
 
@@ -106,36 +107,54 @@ async def run(config: dict) -> dict:
 
         if posts:
             unique_posts, dupes_removed = deduplicate_within_run(posts)
+            downloaded = dl_failed = replies_fetched = 0
 
-            downloaded, dl_failed = await download_media(unique_posts, output_dir, run_dir=run_dir)
+            # Save the scrape immediately. Media + replies below are best-effort
+            # enrichment — a hang or crash in either must never lose the posts
+            # we already captured (previously save ran only after replies, so a
+            # wedged reply tab discarded the whole run).
+            save_posts(unique_posts, run_dir, platform="x", duration_seconds=duration)
+
+            # Media — bounded so a stall can't hang the run (per-file timeouts
+            # inside; whole-phase cap here).
+            try:
+                downloaded, dl_failed = await asyncio.wait_for(
+                    download_media(unique_posts, output_dir, run_dir=run_dir),
+                    timeout=MEDIA_PHASE_TIMEOUT,
+                )
+            except asyncio.TimeoutError:
+                warnings.append(f"media phase exceeded {MEDIA_PHASE_TIMEOUT}s; saved with partial media")
+            except Exception as e:
+                warnings.append(f"media phase error: {e}")
             if dl_failed > 0:
                 warnings.append(f"{dl_failed} media download(s) failed")
 
-            # Fetch replies
-            reply_posts = [
-                t for t in unique_posts
-                if t.replies > 0 and t.author_handle
-            ]
+            # Replies — bounded; a wedged detail tab can't stall the run.
+            reply_posts = [t for t in unique_posts if t.replies > 0 and t.author_handle]
             reply_posts.sort(key=lambda t: t.replies, reverse=True)
-            max_reply_posts = platform_config.get("max_reply_tweets", 20)
-            reply_posts = reply_posts[:max_reply_posts]
-
+            reply_posts = reply_posts[:platform_config.get("max_reply_tweets", 20)]
             if reply_posts:
                 tweet_dicts = [{"id": t.id, "author_handle": t.author_handle} for t in reply_posts]
-                replies_map = await fetch_replies(
-                    context,
-                    tweet_dicts,
-                    max_replies_per_tweet=platform_config.get("max_replies_per_tweet", 5),
-                    batch_size=platform_config.get("reply_batch_size", 4),
-                )
-                post_by_id = {t.id: t for t in unique_posts}
-                for tid, reply_list in replies_map.items():
-                    if tid in post_by_id and reply_list:
-                        post_by_id[tid].top_replies = [asdict(r) for r in reply_list]
-                replies_fetched = sum(len(r) for r in replies_map.values())
-            else:
-                replies_fetched = 0
+                try:
+                    replies_map = await asyncio.wait_for(
+                        fetch_replies(
+                            context, tweet_dicts,
+                            max_replies_per_tweet=platform_config.get("max_replies_per_tweet", 5),
+                            batch_size=platform_config.get("reply_batch_size", 4),
+                        ),
+                        timeout=REPLY_PHASE_TIMEOUT,
+                    )
+                    post_by_id = {t.id: t for t in unique_posts}
+                    for tid, reply_list in replies_map.items():
+                        if tid in post_by_id and reply_list:
+                            post_by_id[tid].top_replies = [asdict(r) for r in reply_list]
+                    replies_fetched = sum(len(r) for r in replies_map.values())
+                except asyncio.TimeoutError:
+                    warnings.append(f"reply phase exceeded {REPLY_PHASE_TIMEOUT}s; saved without replies")
+                except Exception as e:
+                    warnings.append(f"reply phase error: {e}")
 
+            # Re-save with media paths + replies attached.
             save_posts(unique_posts, run_dir, platform="x", duration_seconds=duration)
         else:
             unique_posts = []
