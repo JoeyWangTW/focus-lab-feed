@@ -16,3 +16,4 @@ scripts/ralph/.last-branch
 # R2 credentials for feed publishing (workspace-local, never commit)
 /publish.env
 publish_preview/
+server.log
