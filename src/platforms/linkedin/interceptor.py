@@ -91,7 +91,7 @@ EXTRACT_JS = r"""
     let name = '';
     const alt = avatar?.alt || '';
     // People: "View Jane Doe’s profile". Companies: "View organization page for Acme".
-    const am = alt.match(/^View (.+?)[’']s (?:profile|page|photo)/)
+    const am = alt.match(/^View (.+?)[’']s? (?:profile|page|photo)/)
       || alt.match(/^View organization page for (.+?)$/i);
     if (am) name = am[1].trim();
     if (!name && alt) {
