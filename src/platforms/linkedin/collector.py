@@ -18,6 +18,28 @@ from src.platforms.linkedin.interceptor import ResponseInterceptor
 from src.storage import deduplicate_within_run, get_run_dir, save_posts, save_run_summary, set_run_dir
 
 
+# LinkedIn's feed doesn't scroll the window — the document stays at viewport
+# height and the feed lives inside a scrollable `<main>` (hashed class names,
+# so we detect it by overflow, not selector). Scrolling window/body does
+# nothing, so infinite scroll never fires and only the first screen loads.
+# Scroll the real container instead. Returns the container's scrollTop, or -1
+# if none was found (then we fell back to window scroll).
+SCROLL_FEED_JS = """() => {
+  const cands = [...document.querySelectorAll('main, div, section')].filter(e => {
+    const s = getComputedStyle(e);
+    return (s.overflowY === 'auto' || s.overflowY === 'scroll')
+           && e.scrollHeight > e.clientHeight + 50;
+  });
+  const main = document.querySelector('main');
+  const el = (main && cands.includes(main))
+    ? main
+    : cands.sort((a, b) => b.scrollHeight - a.scrollHeight)[0];
+  if (!el) { window.scrollTo(0, document.body.scrollHeight); return -1; }
+  el.scrollTop = el.scrollHeight;
+  return el.scrollTop;
+}"""
+
+
 def print_summary(summary: dict):
     print("\n" + "=" * 50)
     print("  LinkedIn Collection Summary")
@@ -106,7 +128,7 @@ async def run(config: dict) -> dict:
                 stop_reason = f"Reached max_minutes limit ({max_minutes} min)"
                 break
 
-            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await page.evaluate(SCROLL_FEED_JS)
             delay = random.uniform(delay_min, delay_max)
             await asyncio.sleep(delay)
             scroll_count += 1
