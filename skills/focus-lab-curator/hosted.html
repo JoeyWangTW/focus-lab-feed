@@ -126,9 +126,12 @@
   .dot { width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,0.45); transition:background .18s, transform .18s; }
   .dot.active { background:#fff; transform:scale(1.25); }
 
-  /* Embedded YouTube — tap-to-play facade (avoids loading many iframes upfront). */
-  .yt-facade { position:relative; width:100%; display:block; cursor:pointer; background:#000; min-height:200px; }
-  .yt-facade img { width:100%; display:block; max-height:78vh; object-fit:contain; opacity:0.85; }
+  /* Embedded YouTube — tap-to-play facade (avoids loading many iframes upfront).
+     Facade and player share the exact same 16:9 box so swapping in the iframe
+     causes no layout shift. object-fit:cover fills the box (and crops YouTube's
+     letterbox bars on 4:3 hqdefault thumbnails). */
+  .yt-facade { position:relative; width:100%; aspect-ratio:16/9; display:block; cursor:pointer; background:#000; overflow:hidden; }
+  .yt-facade img { width:100%; height:100%; max-height:none; display:block; object-fit:cover; opacity:0.85; }
   .yt-facade img.remote-failed { display:none; }
   .yt-facade .yt-badge { position:absolute; left:10px; bottom:10px; display:flex; align-items:center; gap:5px;
     background:rgba(0,0,0,0.6); color:#fff; font-size:11px; font-weight:700; padding:4px 9px; border-radius:6px; }
