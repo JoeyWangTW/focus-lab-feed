@@ -107,7 +107,12 @@
   .reason-body svg { flex:0 0 auto; margin-top:1px; }
   .reason-body span { font-style:italic; }
 
-  .post-text { font-size:15.5px; line-height:1.55; color:var(--text); white-space:pre-wrap; word-wrap:break-word; margin-bottom:12px; }
+  .text-block { margin-bottom:12px; }
+  .post-text { font-size:15.5px; line-height:1.55; color:var(--text); white-space:pre-wrap; word-wrap:break-word; }
+  /* Long posts clamp to 8 lines with a Read more toggle; short ones un-clamp themselves. */
+  .post-text.clamped { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:8; overflow:hidden; }
+  .read-more { display:inline-block; margin-top:4px; color:var(--accent); font-size:13.5px; font-weight:600;
+    cursor:pointer; background:none; border:none; font-family:inherit; padding:0; }
 
   /* ---------------- Media ---------------- */
   .media-wrap { position:relative; border-radius:16px; overflow:hidden; background:#000; margin-bottom:12px; border:1px solid var(--border); }
@@ -398,7 +403,9 @@
            <button class="reason-toggle" type="button" aria-expanded="false">${IC.sparkle}<span>Why this?</span><span class="chev">${IC.chev}</span></button>
            <div class="reason-body" hidden>${IC.search}<span>${escapeHTML(post.filter_reason)}</span></div>
          </div>` : '';
-    const text = post.text ? `<div class="post-text">${linkify(post.text)}</div>` : '';
+    const text = post.text
+      ? `<div class="text-block"><div class="post-text clamped">${linkify(post.text)}</div><button class="read-more" type="button">Read more</button></div>`
+      : '';
     const media = renderMedia(post);
     const quoted = renderQuoted(post.quoted_post);
 
@@ -541,6 +548,19 @@
     });
   }
 
+  // Only keep the clamp + "Read more" on posts whose text actually overflows
+  // 8 lines. Short posts get un-clamped and their button removed, so a button
+  // never appears when there's nothing more of our text to reveal.
+  function setupReadMore() {
+    document.querySelectorAll('#posts .post-text.clamped').forEach(el => {
+      const btn = el.parentElement.querySelector('.read-more');
+      if (el.scrollHeight <= el.clientHeight + 2) {
+        el.classList.remove('clamped');
+        if (btn) btn.remove();
+      }
+    });
+  }
+
   // ---------------- Loading ----------------
   function showStatus(msg, isError) {
     const el = $('status'); el.textContent = msg; el.classList.toggle('error', !!isError); el.hidden = false;
@@ -573,6 +593,7 @@
     window.scrollTo(0, 0);
     setupVideoAutoplay();
     setupCarousels();
+    setupReadMore();
     restoreAnchor();
   }
 
@@ -592,6 +613,18 @@
         yt.outerHTML =
           `<iframe class="yt-embed" src="https://www.youtube.com/embed/${encodeURIComponent(id)}?autoplay=1&playsinline=1&rel=0"` +
           ` allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>`;
+        return;
+      }
+      // Tap "Read more"/"Show less" → toggle our 8-line clamp on the post text.
+      const rm = e.target.closest('.read-more');
+      if (rm) {
+        const el = rm.parentElement.querySelector('.post-text');
+        if (el) {
+          const clamping = !el.classList.contains('clamped');
+          el.classList.toggle('clamped');
+          rm.textContent = clamping ? 'Read more' : 'Show less';
+          if (clamping) rm.closest('.post').scrollIntoView({ block: 'nearest' });
+        }
         return;
       }
       // Tap the "Why this?" chip → expand/collapse a post's AI assessment.
